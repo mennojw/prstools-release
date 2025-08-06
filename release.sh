@@ -1,7 +1,10 @@
-#!/usr/bin/env bash
-set -e  # Exit on error
+#!/bin/bash -i
+source ~/.bashrc
+set -e  # Exit on error 
 ORIG_DIR="$(pwd)"
-source activate geno
+source ~/cmd/_geno
+#conda activate geno
+echo 'THEREHEHEHTHTHE'
 
 cd ../prstools
 nbdev_bump_version
