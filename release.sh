@@ -11,10 +11,10 @@ nbdev_bump_version
 cd "$ORIG_DIR"
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
 
-
 git add -u
 git commit -m "automatic release"
 git push
+nbdev_pypi
 
 
 
