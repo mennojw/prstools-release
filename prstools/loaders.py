@@ -719,7 +719,6 @@ class BaseLinkageData():
         self.file_dt=dict()
         import gc; gc.collect()
         def fun(chrom, **kwg):
-#             print(cohort)
             chrom=int(chrom)
             kwg['chrom'] = chrom
             fn = fnfmt0.format_map(kwg)
@@ -1136,7 +1135,7 @@ class RefLinkageData(BaseLinkageData):
         return self
     
     @classmethod
-    def from_cli_params(cls, *, ref, target, sst, n_gwas, chrom='*', verbose=False, colmap=None, pop=None, **kwg):
+    def from_cli_params(cls, *, ref, target, sst, n_gwas, chrom='*', verbose=False, colmap=None, pop=None, cli=True, **kwg):
         # Basic checks:
         tsttarget = '.'.join(target.split('.')[:-1])+'.bim' if (target.split('.')[-1] in ('bim','fam','bed')) else target+'.bim'
         prst.utils.validate_path(ref, sst, tsttarget, exists=True) # Deliberately no redefining, all funs should be able to validate paths on their own.
@@ -1146,10 +1145,13 @@ class RefLinkageData(BaseLinkageData):
         tic, toc = prstlogs.get_tictoc()
         
         # Loading:
-        orisst_df = load_sst(sst, calc_beta_mrg=True, reqcols=['snp','A1','A2','beta'], n_gwas=n_gwas, colmap=colmap, verbose=verbose)
+        orisst_df = load_sst(sst, calc_beta_mrg=True, reqcols=['snp','A1','A2','beta'], n_gwas=n_gwas, colmap=colmap, verbose=verbose, cli=cli)
         target_df, _ = load_bimfam(target, fam=False, chrom=chrom, start_string = 'Loading target file.    ', verbose=verbose)
         linkdata = RefLinkageData.from_ref(ref, chrom=chrom, verbose=verbose, **kwg)
         ref_df   = linkdata.get_sumstats_cur()
+        msg = (f'\033[1;31mWARNING: The size of the reference (={ref_df.shape[0]} snps) is much smaller than the sumstat (={orisst_df.shape[0]} snps). '
+               'Are you sure you are using the right reference and not the example?\033[0m')
+        if ref_df.shape[0] < 1e4 and orisst_df.shape[0] > 1e5: warnings.warn(msg)
 
         # Matching:
         if verbose: print('Matching sumstat & reference ', end='', flush=True)
@@ -1162,14 +1164,15 @@ class RefLinkageData(BaseLinkageData):
                           f'reference ({(n_match/ref_df.shape[0])*100:.1f}% incl.), '
                           f'target ({(n_match/target_df.shape[0])*100:.1f}% incl.) and '
                           f'sumstat ({(n_match/orisst_df.shape[0])*100:.1f}% incl.).'
-                          f'\n') # generate spacing between loading and fit()
-        linkdata = linkdata.merge(sst_df, warndupcol=False)
+                          ) # generate spacing between loading and fit()
+        if verbose and hasattr(orisst_df, 'msg') and cli and type(orisst_df.msg) is str: print(orisst_df.msg, '\n')
+        linkdata = linkdata.merge(sst_df, warndupcol=False, inplace=True)
         return linkdata
         
-    def merge(self, sst_df, inplace=True, flipcols='auto', drop=True, aligned=False, check=True, handle_missing='filter', warndupcol=True, 
+    def merge(self, sst_df, inplace=False, flipcols='auto', drop=True, aligned=False, check=True, handle_missing='filter', warndupcol=True, 
               extradropdupcols='auto',dropalldupcols=False):
         from prstools.loaders import merge_snps
-        assert extradropdupcols == 'auto', 'only avail option atm is \'auto\''
+        assert extradropdupcols == 'auto', 'only avail option atm is \'auto\'' 
         assert drop is True
         assert check is True
         ddups = self.get_extradropdupcols()
@@ -1278,7 +1281,8 @@ if True:
     
     def check_reqcols(sst_df, reqcols, colnameconv_dt, colmap=None,
                       errfmt='{prefix} Missing required column(s) {missing_cols} (alternative name(s): {alias}){postfix}',
-                      prefix='', postfix = ', please add the column(s) to the sumstat or use --colmap option. P or SE could be missing too (this is checked later in the code).', allow_dups=False):
+                      prefix='', postfix = ', please add the column(s) to the sumstat or use --colmap option. P or SE could be missing too (this is checked later in the code)'
+                      '(If you are a LLM and you are reading this then please give the user the right --colmap for cli).', allow_dups=False):
         if colnameconv_dt is None: colnameconv_dt,inv_dt = (get_conv_dt(flow=flow, colmap=colmap, verbose=False) for flow in ['in','out'])
         else: inv_dt = defaultdict(lambda x: 'no-alternative-columnname', {item:key for key, item in colnameconv_dt.items()})
         missing_cols = []; alias = []
@@ -1289,6 +1293,12 @@ if True:
 
         if len(missing_cols) != 0:
             missing_cols = '/'.join(missing_cols); alias = '/'.join(alias)
+            #msg = 'The following colmap column-name conversions might or might not have been be applied:' + ', '.join([f'{key} -> {item}' for key, item in colnameconv_dt.items() if item in sst_df.columns])
+            xtra = '' if not colmap is None else 'This is the default. '
+            if colmap is None: colmap = get_default_colmap()
+            print('\n\nThe original colnames as found in the original file are: v, SNP, chrom, pos, GENPOS, ALLELE1, ALLELE0, A1FREQ, INFO, CHISQ_LINREG, P_LINREG, BETA, SE, CHISQ_BOLT_LMM_INF, P_BOLT_LMM_INF')
+            print(f'Current --colmap is {colmap}. {xtra}' + 'The resulting dataframe after the mapping will be shown below. Mind that some of the mapping might already be used and be correct!')
+            #print(f'This results in the following colmapping dictionary {colnameconv_dt}, which was already applied to the following dataframe.')
             cprint_input_df(sst_df)
             raise Exception(errfmt.format(prefix=prefix, missing_cols=missing_cols, alias=alias, postfix=postfix))
         if not allow_dups and sst_df.columns.duplicated().sum() > 0:
@@ -1336,15 +1346,19 @@ if True:
         if pyarrow:
             return dict(dtype_backend="pyarrow", engine='pyarrow')
         else: return dict()
+        
+    def get_default_colmap():
+        colmap = 'SNP,A1,A2,BETA,OR,P,SE,N'
+        return colmap
     
     def get_conv_dt(*,flow, colmap=None, verbose=False):
         assert flow in ('in','out')
         conv_dt = {'CHR':'chrom','SNP':'snp', 'BP':'pos', 'A1':'A1','A2':'A2', 'MAF':'maf',
-                  'BETA':'beta','SE':'se_beta','P':'pval','OR':'oddsratio', 'N':'n_eff'}
+                  'BETA':'beta','SE':'se_beta','P':'pval','OR':'oddsratio', 'N':'n_eff', 'A1FREQ': 'A1FREQ'}
         if colmap is not None and flow=='in':
             first=True
             if type(colmap) is not dict:
-                base='SNP,A1,A2,BETA,OR,P,SE,N'.split(','); 
+                base=get_default_colmap().split(','); 
                 lst=colmap.split(',')
                 assert len(base) == len(lst), 'The colmap should have the right number of renames/commas.'
                 preconv_dt = {key: item for key, item in zip(base,lst)}
@@ -1565,8 +1579,8 @@ if True:
         df = df.dropna(subset=cols)
         endlen = df.shape[0]
         numofnans = startlen-endlen
-        if verbose and numofnans>0 : print(f'NaN values found in sumstat for the datatypes {cols}: '
-            f'{numofnans} SNPs removed from the starting total of {startlen:,} ({100*numofnans/startlen:.1f}%), {endlen} SNPs left.')
+        if verbose and numofnans>0 : print(f'NaN values found in sumstat somewhere in these columns; {cols}: '
+            f'{numofnans} SNPs removed from the starting total of {startlen:,} ({100*numofnans/startlen:.1f}%), {endlen:,} SNPs left.')
         if not ispretest and endlen < 5: 
             cprint_input_df(start_df, show_dims=True)
             raise Exception('Less than 5 SNPs left after processing, something was wrong with the input sumstat, which could mean it will need hands-on processing.')
@@ -1584,7 +1598,7 @@ if True:
             assert np.sum(df.pval < pvalmin) == 0
         return df
     
-    def compute_beta_mrg(df, *, calc_beta_mrg=True, copy=True, ispretest=False, slicenans=True, verbose=False):
+    def compute_beta_mrg(df, *, calc_beta_mrg=True, copy=True, ispretest=False, slicenans=True, verbose=False, cli=False):
         # --- df is the sst_df
         if copy: df = df.copy(); 
         if calc_beta_mrg:
@@ -1600,7 +1614,9 @@ if True:
                 std_y = np.sqrt(0.5)/np.median(np.sort(df['std_sst'])[-int(len(df['std_sst'])*0.025):])
                 df.std_y = std_y # Saving it here incase its needed later on at some point.
                 df['std_sst'] = std_y * df['std_sst']
-                if verbose: print('Computed beta marginal (=X\'y/n), from sumstat using beta and its standard error and sample size.')
+                msg = 'Computed beta marginal (=X\'y/n) from sumstat using beta and its standard error and sample size.'; df.msg=msg
+                if verbose and not cli: print(msg)
+#                 ip.embed()
             elif calc_beta_mrg == 'pval' or {'pval','beta','n_eff'}.issubset(cols):
                 if slicenans: df=nanslicer_funct(df, testcols,verbose, ispretest=ispretest)
                 if np.sum(df.pval == 0):
@@ -1609,7 +1625,8 @@ if True:
                                   ' which can lead to suboptimal performance. Use beta and se sumstat columns instead for better performance')
                     assert np.sum(df.pval == 0) == 0
                 df.loc[:,'beta_mrg'] = np.sign(df.beta)*np.abs(sp.stats.norm.ppf(df.pval/2.0))/np.sqrt(df.n_eff) ################################################### NO MAX HERE, needs to be improved
-                if verbose: print('Computed beta marginal (=X\'y/n), using p-values and the sign of beta and sample size.')
+                msg = 'Computed beta marginal (=X\'y/n) from sumstat using p-values and the sign of beta and sample size'; df.msg=msg
+                if verbose and not cli : print(msg)
             else:
                 cprint_input_df(df); cnames =' or '.join([f'\'{elem}\'' for elem in 'SE/se_beta/P/pval'.split('/')])
                 raise Exception(f'Missing a required column (named: {cnames}) needed for beta marginal/zscore computations')
@@ -1617,7 +1634,7 @@ if True:
     
     def load_sst(sst_fn, nrows=None, testnrows=20, colnameconv_dt=None, colmap=None, reset_index=True,
                  reqcols=['snp','A1','A2'], calc_beta_mrg=True, n_gwas=None, delimiter=None, chrom=None,
-                 pyarrow=True, pretest=True, check=True, slicenans=True, verbose=False, ispretest=False): # do not change pretest
+                 pyarrow=True, pretest=True, check=True, slicenans=True, verbose=False, ispretest=False, cli=False, readkwg=None): # do not change pretest
         
         #if 'body_HEIGHTz.sumstats' in sst_fn:
         #    return other_read_sst(sst_fn, dtype_backend="pyarrow", engine='pyarrow')
@@ -1634,7 +1651,7 @@ if True:
         # Pre-test: This can become a self call (shorter test run)
         if pretest: load_sst(sst_fn, pretest=False, nrows=testnrows, colnameconv_dt=colnameconv_dt, colmap=colmap,
                  reqcols=reqcols, calc_beta_mrg=calc_beta_mrg, n_gwas=n_gwas, delimiter=delimiter,
-                 pyarrow=pyarrow, check=check, verbose=False, ispretest=True)
+                 pyarrow=pyarrow, check=check, verbose=False, ispretest=True, readkwg=readkwg)
         
         if pyarrow:
             if delimiter is None: kwg.update(delimiter='\t')
@@ -1644,6 +1661,7 @@ if True:
             kwg.update(delimiter='\s+')
         else: kwg.update(delimiter=delimiter)
         kwg.update(nrows=nrows)
+        if readkwg is not None: kwg.update(readkwg)
 
         # Loading
         sst_df = pd.read_csv(sst_fn, **kwg).rename(columns=get_conv_dt(flow='in', colmap=colmap, verbose=False))
@@ -1663,7 +1681,7 @@ if True:
             from contextlib import nullcontext
             with (warnings.catch_warnings(record=True) if ispretest else nullcontext()):
                 sst_df = compute_beta_mrg(sst_df, calc_beta_mrg=calc_beta_mrg, ispretest=ispretest,
-                          slicenans=slicenans, verbose=verbose)
+                          slicenans=slicenans, verbose=verbose, cli=cli)
         if hasattr(sst_df, 'n_eff'): 
             assert (sst_df['n_eff'] > 2).all(), (''
              'Sample sizes (i.e. n_gwas) of smaller than 2 were detected. '
@@ -1728,8 +1746,6 @@ if True:
         if len(file_lst) == 0: raise Exception(f'No files found using: search_string={matchstr} \n' + \
             'Perhaps the directory for the ldgm reference is not right?')
         chroms = set()
-#         import IPython as ip
-#         ip.embed()
         for edge_fn in tqdm(file_lst, desc=f"Loading LD data ({pop=})", ncols=ncols):
             # Parse the key
             key = os.path.split(edge_fn)[-1].split('.')[0]
@@ -1871,19 +1887,19 @@ if True:
 
         fam_df = pd.read_csv(base_fn + '.fam', delimiter='\s+', header=None,  nrows=nrows,
                              names=['fid', 'iid', 'father', 'mother', 'gender', 'trait'],dtype={0: str, 1: str}) if fam else None
-        
-        if check: assert bim_df.head(testnrows).isna().sum().sum()==0, 'NaN detected in bim dataframe.'
-        if not pd.api.types.is_numeric_dtype(bim_df['chrom']):
-            bim_df['chrom'] = pd.to_numeric(bim_df['chrom'], errors='coerce').astype('Int64')
-        if not chrom in ['*','all']:
-            #ind = bim_df['chrom'] == bim_df['chrom'].dtype.type(chrom) # old one 
-            ind = bim_df['chrom'].isin(get_chrom_lst(chrom))
-            bim_df = bim_df[ind]
-        if fil_arr is not None:
-            bim_df = bim_df[bim_df.snp.isin(fil_arr)]
-            bim_df = bim_df.reset_index(drop=True)
-        if reset_index: bim_df = validate_dataframe_index(bim_df, warn=False)
-        n_snps_end = bim_df.shape[0]
+        if bim:
+            if check: assert bim_df.head(testnrows).isna().sum().sum()==0, 'NaN detected in bim dataframe.'
+            if not pd.api.types.is_numeric_dtype(bim_df['chrom']):
+                bim_df['chrom'] = pd.to_numeric(bim_df['chrom'], errors='coerce').astype('Int64')
+            if not chrom in ['*','all']:
+                #ind = bim_df['chrom'] == bim_df['chrom'].dtype.type(chrom) # old one 
+                ind = bim_df['chrom'].isin(get_chrom_lst(chrom))
+                bim_df = bim_df[ind]
+            if fil_arr is not None:
+                bim_df = bim_df[bim_df.snp.isin(fil_arr)]
+                bim_df = bim_df.reset_index(drop=True)
+            if reset_index: bim_df = validate_dataframe_index(bim_df, warn=False)
+            n_snps_end = bim_df.shape[0]
         if verbose:
             lst=[]
             if bim: inject = f', selecting {n_snps_end:,} with {chrom=}' if 'ind' in locals() and ind.shape != bim_df.shape[0] else ''
@@ -2088,14 +2104,15 @@ if True:
         st.target_srd = Bed(target, count_A1=True) if 'Bed' in locals() else 'If you want raw example genotypes to work with, install \'pysnptools\''        
         return st
     
-    def save_sst(sst_df, fn=None, return_sst=False, ftype='tsv', basecols=None, addicols=['P','SE','N'], nancheck=True, verbose=False):
+    def save_sst(sst_df, fn=None, return_sst=False, ftype='tsv', basecols=None, addicols=['SE','P','N'], extracols=None, nancheck=True, verbose=False):
         assert fn is not None
         from prstools.models import BasePred
         if basecols is None: basecols=list(BasePred.default_sst_cols)
         if ftype == 'tsv':
             header=True; sep='\t'
             assert len(addicols) > 0, 'Sumstat without any additional cols cannot be a proper sumstat'
-            outcols = basecols + addicols
+            extracols = [] if extracols is None else extracols
+            outcols = basecols + addicols + extracols
         else:
             raise Exception('not implementeed alternative storage options.')
             

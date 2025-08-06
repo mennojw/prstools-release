@@ -62,14 +62,14 @@ class BasePred(ABC):
         insert = len(cls.__name__.lower())*' '
         cmdname=cls.__name__.lower() #,string=string, insert=insert
         ldrefname='ldgm_1kg_pop' if 'sparse' in cls.__doc__.lower() else 'ldref_1kg_pop'
-        chromopt='--chrom \'*\'' if 'sparse' in cls.__doc__.lower() else ''
+        chromopt='--chrom \'*\' ' if 'sparse' in cls.__doc__.lower() else ''
         epilog=f'''\
         Examples --> can be directly copy-pasted (:
-         prst downloadutil --pattern example --destdir ./; cd example  {insert}                                                  # Makes \'example\' dir in current path.
-         prstools {cmdname} --ref_dir {ldrefname} --bim_prefix target --sst_file sumstats.tsv {chromopt} --n_gwas 2565 --out_dir ./result-{cmdname} # Run the model with example data.
-         prst {cmdname} -r {ldrefname} -t target -s sumstats.tsv -n 2565 {chromopt} -o ./result-{cmdname}                        # A shorter version of previous command.
-         plink --bfile target --out prspred --keep-allele-order --score ./result-{cmdname}_* 2 4 6                                         # Make predictions from weights (plink must be installed).
+         prst downloadutil --pattern example --destdir ./; cd example  {insert}                                        # Makes \'example\' dir in current path.
+         prstools {cmdname} --ref {ldrefname} --target target --sst sumstats.tsv {chromopt}--n_gwas 2565 --out ./result-{cmdname} # Run the model with example data.
+         prst {cmdname} -r {ldrefname} -t target -s sumstats.tsv -n 2565 {chromopt}-o ./result-{cmdname} --pred                  # A shorter version of previous that also does the predictions.
         '''
+        #plink --bfile target --out prspred --keep-allele-order --score ./result-{cmdname}_* 2 4 6 # Make predictions from weights (plink must be installed).
         newepi = []
         for elem in epilog.split('\n'):
             elems = elem.split('#')
@@ -109,7 +109,7 @@ class BasePred(ABC):
         )
         
         ##### THIS STUFF IS ACTUALLY NOT BEING USED, BUT THIS IS HOW IT SHOULD BE USED.
-
+        verifythisisnotused
         
         # Add data related kwargs:
         data_group = model_parser.add_argument_group('Data Arguments (first 5 required)')
@@ -137,7 +137,7 @@ class BasePred(ABC):
     
     @classmethod
     def from_params(cls, groupby=False, **kwg):
-        #import IPython as ip; ip.embed()
+        #import IPython as ip; ip.embed() 
         if str(groupby) == '-1': groupby=False
         if groupby:
             model = GroupByModel(cls(**kwg), groupby=groupby, verbose=kwg.get('verbose',False))
@@ -174,8 +174,8 @@ class BasePred(ABC):
         if pred: # Prediction
             #import IPython as ip; ip.embed() # save these lines for later..
             #model.remove_linkdata(); linkdata.clear_linkage_allregions # seems to do pretty much nothing.. anyway xp was 5% mem, which jumped to 20 and 60 later
-            srd = prst.loaders.load_bed(target, verbose=verbose)
-            yhat = model.predict(srd); 
+            bed = prst.loaders.load_bed(target, verbose=verbose)
+            yhat = model.predict(bed); 
             prst.loaders.save_prs(yhat, fn=out_fnfmt, verbose=verbose) # Store prediction result
         if return_models: 
             return model
@@ -366,8 +366,7 @@ class BasePred(ABC):
         
         prstlogs = prst.utils.get_prstlogs()
         tic, toc = prstlogs.get_tictoc()
-        string = '(matching inputs now)' if validate else ''
-        if self.verbose: print(f'Predicting phenotypes for given snp inputs i.e. generating PRS (done in chucks of {n_inchunk} snps){string}.', flush=True)
+        if self.verbose: print(f'Predicting phenotypes i.e. generating PRS (in chucks of {n_inchunk} snps).', flush=True)
         assert weight_type in ('allele','standardized'); 
         if trait_df is not None: assert localdump
         weights_df = self.get_weights()
@@ -998,7 +997,7 @@ class PRSCS2(BasePred):
     "PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors."
         
     def __init__(self, *,
-         n_iter=1000,              # Total number of MCMC iterations, using 1 chain.
+         n_iter=1000,              # Total number of MCMC iterations.
          n_burnin=0.5,             # Number of burn-in iterations if larger than 1 or fraction of n_iter if smaller then 1.
          n_slice=1,                # Thinning of the Markov chain.
          shuffle=False,

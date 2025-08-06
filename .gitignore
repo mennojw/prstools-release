@@ -3,6 +3,7 @@
 linkdata.h5
 example*
 .vscode
+archiv/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

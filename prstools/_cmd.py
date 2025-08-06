@@ -22,44 +22,16 @@ def set_cpu_envvars(cpus, output_string=True):
         True
     cpu_display_string = cpus if cpus != -1 else 'Not specified'
     return cpu_display_string
-        #print('Not setting environment variables to control number of cpus.')
         
-        
-##################################################### BEST IF THIS IS ALREADY DONE BY THE TIME THIS CODE RUNS ############
-        
-## CLI mechanics functionality:
-def process_subparserkwgs(subparserkwg_lst):
-    from textwrap import dedent
-    for i, spkwg in enumerate(subparserkwg_lst):
-        if type(spkwg) is type({}): continue
-        elif 'PRSTCLI' in str(getattr(spkwg,'__bases__','')):
-            new_spkwg = spkwg._get_cli_spkwg()
-            subparserkwg_lst[i] = new_spkwg
-        elif 'BasePred' in str(getattr(spkwg,'__bases__','')):
-            from .utils import retrieve_pkwargs
-            doc = dedent(spkwg.__doc__)
-            new_spkwg = dict(
-                cmdname    = spkwg.__name__.lower(), #command name
-                clsname    = spkwg.__name__, #class name
-                description= doc,
-                help       = doc.split('\n')[0],
-                epilog     = spkwg._get_cli_epilog(),
-                module     = spkwg.__module__,
-                pkwargs    = retrieve_pkwargs(spkwg),
-                subtype    = 'BasePred'
-            )
-            subparserkwg_lst[i] = new_spkwg
-        else: 
-            print(str(getattr(spkwg,'__bases__','')))
-            raise NotImplementedError('Contact dev.') 
-    return subparserkwg_lst
+# This functioning is needed here, a lazy retrieval s.t. imports only happen when stuff is actually run:
 def retrieve_classmethod(*, clsname, methodname, modulename='prstools.models'):
-    #models = importlib.reload(models)
     def pipefun(*args,**kwargs):
         import importlib
         cls = getattr(importlib.import_module(modulename), clsname)
         return getattr(cls,methodname)(*args,**kwargs)
     return pipefun
+
+##################################################### BEST IF THIS IS ALREADY DONE BY THE TIME THIS CODE RUNS, BELOW ############
 def process_argkwargs(kwargs, setverbosetrue=False):
     kwargs = kwargs.copy() 
     kwargs['help'] = argparse.SUPPRESS if kwargs.get('help', None) is None else kwargs['help']
@@ -78,13 +50,10 @@ def process_argkwargs(kwargs, setverbosetrue=False):
         if 'required' in kwargs:
             if kwargs['required'] is True:
                 kwargs['help'] = kwargs['help'] + ' (required)'
-#                 kwargs['help'] = '* '+kwargs['help'] + format_bold(' (required)')
     return kwargs
 def format_color(text, color_code): return f"\033[{color_code}m{text}\033[0m"
 def format_bold(text): return f"\033[1m{text}\033[0m"
-##################################################### BEST IF THIS IS ALREADY DONE BY THE TIME THIS CODE RUNS ############
-
-
+##################################################### BEST IF THIS IS ALREADY DONE BY THE TIME THIS CODE RUNS, ABOVE ############
 
 ## Formatting functionality:
 class CustomArgumentParser(argparse.ArgumentParser):
@@ -98,11 +67,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
             return string.replace('usage:','\nUsage:\n')
         
         def usage_optionals_formattingx(self, string):
-#             print(string.find('\n'))
-#             loc = max(string.find('[-h]'), 0)
-#             print(loc*'-')
             string = string.replace('] [','  ')
-#             string = string.replace('> [','>\n'+loc*'-'+'[')
             return string
 class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,argparse.RawDescriptionHelpFormatter): #, argparse.RawDescriptionHelpFormatter):
     def __init__(self, prog, indent_increment=1, max_help_position=60, width=None, minwidth=0):
@@ -131,8 +96,6 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,argparse.RawDescrip
                 parts.extend(action.option_strings)
                 parts = parts[::-1]
                 parts[-1] += ' %s' % args_string
-#                 if parts[-1] in ['']
-#             if action.required: return '\b\b* '+', '.join(parts)
             return ', '.join(parts)
 
 def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk Score creation. \n\'prst\' is a commandline shorthand for \'prstools\'",
@@ -146,6 +109,7 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
         if reload: import importlib; from prstools import _parser_vars; importlib.reload(_parser_vars)
         from prstools._parser_vars import subparserkwg_lst
     else:
+        from prstools.utils import process_subparserkwgs
         subparserkwg_lst=process_subparserkwgs(subparserkwg_lst)
         # subparserkwg_lst contains the information to construct parsers
         # This is generated from model code by the developer and saved
@@ -159,7 +123,6 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
     )
     general_group = parser.add_argument_group('General Options')
     parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help=argparse.SUPPRESS) # , help='Show help')
-
     
     if return_spkwg: return subparserkwg_lst
     
@@ -178,19 +141,23 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
     for i, spkwg in enumerate(subparserkwg_lst):
         if spkwg['subtype'] == 'BasePred':
             # Create Model parser and add basic help:
-            model_parser = subparser.add_parser(spkwg['cmdname'], help=spkwg['help'],
+            basemodels = ['prscs2', 'xprs']
+            model_parser = subparser.add_parser(spkwg['cmdname'], 
+                                                help=spkwg['help'] if spkwg['cmdname'] in basemodels else argparse.SUPPRESS,
                                                 description=spkwg['description'],
                                                 epilog=spkwg['epilog'],
                                                 formatter_class=CustomFormatter,
                                                 argument_default=argparse.SUPPRESS,
                                                 add_help=False)
             
+            if not spkwg['cmdname'] in basemodels:
+                subparser._choices_actions = [ca for ca in subparser._choices_actions if ca.dest != spkwg['cmdname']]
             modelgeneral_group = model_parser.add_argument_group('General Options')
             modelgeneral_group.add_argument('-h', '--help', action='help', help='Show this help message and exit.') #default=argparse.SUPPRESS
             # WARNING!: there is still something wrong with the default of this --cpus cli argument, it does not seem to get pushed into the setting of the number of cores function.
             modelgeneral_group.add_argument('--cpus', '-c', **prc(dict(metavar='<number-of-cpus>', default=get_default_cpus(), type=int, 
-                        help='The number of cpus to use. This will generate environmental variables inside of the python session, which will control the number of used cores. \
-                              Functionality can be turned-off completely, by setting it to -1.')))
+                        help='The number of cpus to use. Generally most efficient if chosen to be between 1 and 5. \
+                              Functionality can be turned-off completely by setting it to -1.')))
             
             # Add data related kwargs:
             data_group = model_parser.add_argument_group('Data Arguments (first 5 required)')
@@ -216,11 +183,11 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                     **prc(dict(required=False,type=str, metavar='<chroms>', default='all', 
                         help="Optional: Select specific chromosome to work with. You can specify a specific chromosome as e.g. \"--chrom 3\". All chromosomes are used by default.")))
             data_group.add_argument("--colmap", #lambda x: x.split(',')
-                        type=str, metavar='<alternative_colnames>',
-                        help="Optional: Allows one to specify an alterative column name for columns SNP,A1,A2,BETA,OR,P,SE,N (in that order). "
+                        type=str, metavar='<alternative_colnames>', # Allows one to specify an alterative column name for columns SNP,A1,A2,BETA,OR,P,SE,N (in that order). "
+                        help="Optional: Allows one to specify an alterative column name for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff (in that order). "
                                     "Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,\" (OR & N are excluded in this example). "
                                     "When the command is run a quick this_column -> that_column conversion table will be shown. "
-                                    "Additionaly prstools has many internal checks to make sure a good PRS will be generated! ")
+                                    "Additionaly prstools has many internal checks to make sure a good PRS will be generated! By default this is the PRS-CS standard. (default: SNP,A1,A2,BETA,OR,P,SE,N)")
             data_group.add_argument("--pred", "-p", 
                                     action='store_true',
                                     help="Optional: Add this argument to predict the PRS for the induviduals in the target dataset.")
@@ -228,7 +195,6 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             # Add model-related arguments (hyper parameters and such):
             modelargs_group = model_parser.add_argument_group('Model Arguments (all optional)')
             for argname, item in spkwg['pkwargs'].items():
-#                 if argname == 'n_iter':ergerg
                 #cargs, ckwargs = process_pkwargs(item) << -- underconstruction, need 2 add verbose=True
                 modelargs_group.add_argument(*item['args'], **process_argkwargs(item['kwargs']))
             # Below 'func' contains a delayed import of a classmethod that can run the full method from arg
@@ -313,11 +279,6 @@ def main(argv=None):
     #**{key:item for key, item in args_dt.items() if key=='cpus'}if 'cpus' in args_dt: 
     cpus = args_dt.get('cpus', get_default_cpus())
     cpu_display_string = set_cpu_envvars(cpus, output_string=True)
-#    import IPython as ip; ip.embed()
-#     cpus=args_dt.get('cpus')
-#     set_cpu_envvars()
-
-
 
     # Initialize logs and grab certain parts:
     from prstools.utils import get_prstlogs; import pandas as pd; import socket
@@ -364,7 +325,6 @@ if '_isdevenv_prstools' in locals() or '--dev' in sys.argv:
         
     from prstools import models, utils; import importlib
     importlib.reload(models); importlib.reload(utils)
-
     try:
         from prstools.models import XPRS, PRSCS2, PredPRS
         from prstools.utils import DownloadUtil, store_argparse_dicts , Combine

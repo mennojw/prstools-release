@@ -87,6 +87,33 @@ def save_to_interactive(dct=None, maxframes=20):
             cur_frame.f_globals.update(dct)
             break
             
+## CLI mechanics functionality:
+def process_subparserkwgs(subparserkwg_lst):
+    from textwrap import dedent
+    for i, spkwg in enumerate(subparserkwg_lst):
+        if type(spkwg) is type({}): continue
+        elif 'PRSTCLI' in str(getattr(spkwg,'__bases__','')):
+            new_spkwg = spkwg._get_cli_spkwg()
+            subparserkwg_lst[i] = new_spkwg
+        elif 'BasePred' in str(getattr(spkwg,'__bases__','')):
+            from .utils import retrieve_pkwargs
+            doc = dedent(spkwg.__doc__)
+            new_spkwg = dict(
+                cmdname    = spkwg.__name__.lower(), #command name
+                clsname    = spkwg.__name__, #class name
+                description= doc,
+                help       = doc.split('\n')[0],
+                epilog     = spkwg._get_cli_epilog(),
+                module     = spkwg.__module__,
+                pkwargs    = retrieve_pkwargs(spkwg),
+                subtype    = 'BasePred'
+            )
+            subparserkwg_lst[i] = new_spkwg
+        else: 
+            print(str(getattr(spkwg,'__bases__','')))
+            raise NotImplementedError('Contact dev.') 
+    return subparserkwg_lst
+            
 def store_argparse_dicts(subparserkwg_lst, show=False, sort_dicts=False, lst=None, store=True):
     from ._cmd import parse_args
     if not lst: lst = []

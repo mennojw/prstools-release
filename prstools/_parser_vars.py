@@ -82,11 +82,9 @@ subparserkwg_lst = [{'cmdname': 'downloadutil',
   'description': 'XPRS: A very fast `eXPReSs` infitessimal effect-size prediction method that can estimate heritabilty on the fly.',
   'help': 'XPRS: A very fast `eXPReSs` infitessimal effect-size prediction method that can estimate heritabilty on the fly.',
   'epilog': 'Examples --> can be directly copy-pasted (:\n'
-            " prst downloadutil --pattern example --destdir ./; cd example                                                        \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
-            ' prstools xprs --ref_dir ldref_1kg_pop --bim_prefix target --sst_file sumstats.tsv  --n_gwas 2565 --out_dir ./result-xprs \x1b[32m# Run the model with example data.\x1b[0m\n'
-            ' prst xprs -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565  -o ./result-xprs                        \x1b[32m# A shorter version of previous command.\x1b[0m\n'
-            ' plink --bfile target --out prspred --keep-allele-order --score ./result-xprs_* 2 4 6                                         \x1b[32m# Make predictions from weights (plink must be '
-            'installed).\x1b[0m\n',
+            " prst downloadutil --pattern example --destdir ./; cd example                                              \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
+            ' prstools xprs --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-xprs \x1b[32m# Run the model with example data.\x1b[0m\n'
+            ' prst xprs -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-xprs --pred                  \x1b[32m# A shorter version of previous that also does the predictions.\x1b[0m\n',
   'module': 'prstools.models._base',
   'pkwargs': {'h2': {'args': ['--h2'], 'kwargs': {'help': 'Specify heritabilty in case desired, otherwise it is estimated by the model.', 'type': float, 'default': None}},
               'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Maximum number of iterations. Should be greater than or equal to 1.', 'type': int, 'default': 600}},
@@ -115,13 +113,12 @@ subparserkwg_lst = [{'cmdname': 'downloadutil',
   'description': 'PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.',
   'help': 'PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.',
   'epilog': 'Examples --> can be directly copy-pasted (:\n'
-            " prst downloadutil --pattern example --destdir ./; cd example                                                          \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
-            ' prstools prscs2 --ref_dir ldref_1kg_pop --bim_prefix target --sst_file sumstats.tsv  --n_gwas 2565 --out_dir ./result-prscs2 \x1b[32m# Run the model with example data.\x1b[0m\n'
-            ' prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565  -o ./result-prscs2                        \x1b[32m# A shorter version of previous command.\x1b[0m\n'
-            ' plink --bfile target --out prspred --keep-allele-order --score ./result-prscs2_* 2 4 6                                         \x1b[32m# Make predictions from weights (plink must be '
-            'installed).\x1b[0m\n',
+            " prst downloadutil --pattern example --destdir ./; cd example                                                \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
+            ' prstools prscs2 --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-prscs2 \x1b[32m# Run the model with example data.\x1b[0m\n'
+            ' prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-prscs2 --pred                  \x1b[32m# A shorter version of previous that also does the '
+            'predictions.\x1b[0m\n',
   'module': 'prstools.models._base',
-  'pkwargs': {'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Total number of MCMC iterations, using 1 chain.', 'type': int, 'default': 1000}},
+  'pkwargs': {'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Total number of MCMC iterations.', 'type': int, 'default': 1000}},
               'n_burnin': {'args': ['--n_burnin'],
                            'kwargs': {'help': 'Number of burn-in iterations if larger than 1 or fraction of n_iter if smaller then 1.', 'type': float, 'default': 0.5}},
               'n_slice': {'args': ['--n_slice'], 'kwargs': {'help': 'Thinning of the Markov chain.', 'type': int, 'default': 1}},
@@ -140,6 +137,98 @@ subparserkwg_lst = [{'cmdname': 'downloadutil',
               'compute_score': {'args': ['--compute_score'], 'kwargs': {'help': None, 'type': bool, 'default': False}},
               'clear_linkdata': {'args': ['--clear_linkdata'], 'kwargs': {'help': None, 'type': bool, 'default': True}},
               'pop': {'args': ['--pop'], 'kwargs': {'help': None, 'type': str, 'default': 'pop'}},
+              'pbar': {'args': ['--pbar'], 'kwargs': {'help': None, 'type': bool, 'default': True}},
+              'verbose': {'args': ['--verbose'], 'kwargs': {'help': None, 'type': bool, 'default': False}}},
+  'subtype': 'BasePred'},
+ {'cmdname': 'sprscs',
+  'clsname': 'SPRSCS',
+  'description': 'SPRS-CS: A polygenic prediction method that uses sparse LDGMs to infers posterior SNP effect sizes under continuous shrinkage (CS) priors. \n'
+                 ' -> please mind that the internals of dataloading are different for this command, since it uses ldgm blocks.',
+  'help': 'SPRS-CS: A polygenic prediction method that uses sparse LDGMs to infers posterior SNP effect sizes under continuous shrinkage (CS) priors. ',
+  'epilog': 'Examples --> can be directly copy-pasted (:\n'
+            " prst downloadutil --pattern example --destdir ./; cd example                                                \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
+            " prstools sprscs --ref ldgm_1kg_pop --target target --sst sumstats.tsv --chrom '*' --n_gwas 2565 --out ./result-sprscs \x1b[32m# Run the model with example data.\x1b[0m\n"
+            " prst sprscs -r ldgm_1kg_pop -t target -s sumstats.tsv -n 2565 --chrom '*' -o ./result-sprscs --pred                  \x1b[32m# A shorter version of previous that also does the "
+            'predictions.\x1b[0m\n',
+  'module': 'prstools.models._ext',
+  'pkwargs': {'pop': {'args': ['--pop'], 'kwargs': {'help': 'The LDGM reference population to us, choices are AFR, AMR, EAS, EUR, SAS.', 'type': str, 'default': 'EUR'}},
+              'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Total number of MCMC iterations! (55-this is a little placeholder text)', 'type': int, 'default': 1000}},
+              'n_burnin': {'args': ['--n_burnin'],
+                           'kwargs': {'help': 'Number of burn-in iterations if larger than 1 or fraction of n_iter if smaller then 1.', 'type': float, 'default': 0.5}},
+              'n_slice': {'args': ['--n_slice'], 'kwargs': {'help': 'Thinning of the Markov chain.', 'type': int, 'default': 1}},
+              'seed': {'args': ['--seed'], 'kwargs': {'help': 'Random seed for reproducibility.', 'type': int, 'default': -1}},
+              'a': {'args': ['--a'], 'kwargs': {'help': 'Parameter a in the gamma-gamma prior.', 'type': float, 'default': 1.0}},
+              'b': {'args': ['--b'], 'kwargs': {'help': 'Parameter b in the gamma-gamma prior.', 'type': float, 'default': 0.5}},
+              'phi': {'args': ['--phi'],
+                      'kwargs': {'help': 'Global shrinkage parameter phi. If phi is not specified, it will be learnt from the data using a Bayesian approach.',
+                                 'type': float,
+                                 'default': None}},
+              'clip': {'args': ['--clip'], 'kwargs': {'help': 'Clip parameter.', 'type': float, 'default': 1.0}},
+              'sampler': {'args': ['--sampler'],
+                          'kwargs': {'help': "Sampler algorithm. currently only supported 'ldgm' option (4 devs: other options in alpha state, hence not listed here).",
+                                     'type': str,
+                                     'default': 'ldgm'}},
+              'gigsampler': {'args': ['--gigsampler'], 'kwargs': {'help': None, 'type': str, 'default': 'vec'}},
+              '_solving_scheme': {'args': ['--_solving_scheme'], 'kwargs': {'help': None, 'type': str, 'default': 'cg-precond'}},
+              'secret': {'args': ['--secret'], 'kwargs': {'help': None, 'type': str, 'default': 'ergegr'}},
+              'scaling': {'args': ['--scaling'], 'kwargs': {'help': None, 'type': str, 'default': 'ref'}},
+              'local_rm': {'args': ['--local_rm'], 'kwargs': {'help': None, 'type': bool, 'default': False}},
+              'compute_score': {'args': ['--compute_score'],
+                                'kwargs': {'help': 'Compute the log marginal likelihood at each iteration of the optimisation.', 'type': bool, 'default': False}},
+              'clear_linkdata': {'args': ['--clear_linkdata'], 'kwargs': {'help': None, 'type': bool, 'default': True}},
+              'pbar': {'args': ['--pbar'], 'kwargs': {'help': 'Display a progress bar during optimization.', 'type': bool, 'default': True}},
+              'verbose': {'args': ['--verbose'], 'kwargs': {'help': 'Verbose mode when fitting the model.', 'type': bool, 'default': False}}},
+  'subtype': 'BasePred'},
+ {'cmdname': 'dentist',
+  'clsname': 'Dentist',
+  'description': 'DENTIST sumstats quality control.',
+  'help': 'DENTIST sumstats quality control.',
+  'epilog': 'Examples --> can be directly copy-pasted (:\n'
+            " prst downloadutil --pattern example --destdir ./; cd example                                                 \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
+            ' prstools dentist --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-dentist \x1b[32m# Run the model with example data.\x1b[0m\n'
+            ' prst dentist -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-dentist --pred                  \x1b[32m# A shorter version of previous that also does the '
+            'predictions.\x1b[0m\n',
+  'module': 'prstools.models._ext',
+  'pkwargs': {'linkdata': {'args': ['--linkdata'], 'kwargs': {'help': None, 'type': NoneType, 'default': None}},
+              'pop': {'args': ['--pop'], 'kwargs': {'help': 'The LDGM reference population to us, choices are AFR, AMR, EAS, EUR, SAS.', 'type': str, 'default': 'EUR'}},
+              'seed': {'args': ['--seed'], 'kwargs': {'help': 'Random seed for reproducibility.', 'type': int, 'default': 'SUPPRESS'}},
+              'algo': {'args': ['--algo'],
+                       'kwargs': {'help': "Sampler algorithm. currently only supported 'ldgm' option (4 devs: other options in alpha state, hence not listed here).",
+                                  'type': str,
+                                  'default': 'ldgm'}},
+              'n_set': {'args': ['--n_set'], 'kwargs': {'help': 'Number of sets, currently only 2 makes sense, corresponding to S1 & S2 in the dentist paper.', 'type': int, 'default': 2}},
+              'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Number of iters for the Dentist algo.', 'type': int, 'default': 10}},
+              'ldcut': {'args': ['--ldcut'], 'kwargs': {'help': 'something ldcut.', 'type': float, 'default': 0.95}},
+              'pgwascut': {'args': ['--pgwascut'],
+                           'kwargs': {'help': 'Defines the GWAS P-value threshold to categorize variants as either null or significant.', 'type': float, 'default': 0.01}},
+              'pdentistcut': {'args': ['--pdentistcut'], 'kwargs': {'help': 'Defines the DENTIST P-value threshold to filter variants out.', 'type': float, 'default': 5e-08}},
+              'topcut': {'args': ['--topcut'], 'kwargs': {'help': 'Another thing', 'type': float, 'default': 0.005}},
+              'includecols': {'args': ['--includecols'], 'kwargs': {'help': "e.g. ['P'] or ['SE'] or ['SE','P']", 'type': list, 'default': ['SE', 'P', 'N']}},
+              '_solving_scheme': {'args': ['--_solving_scheme'], 'kwargs': {'help': None, 'type': str, 'default': 'cg-precond'}},
+              'scaling': {'args': ['--scaling'], 'kwargs': {'help': None, 'type': str, 'default': 'ref'}},
+              'clear_linkdata': {'args': ['--clear_linkdata'], 'kwargs': {'help': None, 'type': bool, 'default': True}},
+              'report': {'args': ['--report'], 'kwargs': {'help': None, 'type': bool, 'default': False}},
+              'pbar': {'args': ['--pbar'], 'kwargs': {'help': 'Display a progress bar during optimization.', 'type': bool, 'default': True}},
+              'verbose': {'args': ['--verbose'], 'kwargs': {'help': 'Verbose mode when fitting the model.', 'type': bool, 'default': False}}},
+  'subtype': 'BasePred'},
+ {'cmdname': 'snpfilter',
+  'clsname': 'SNPFilter',
+  'description': 'Univariate SNP filtering using SNP std-dev. matching and other techniques.',
+  'help': 'Univariate SNP filtering using SNP std-dev. matching and other techniques.',
+  'epilog': 'Examples --> can be directly copy-pasted (:\n'
+            " prst downloadutil --pattern example --destdir ./; cd example                                                   \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
+            ' prstools snpfilter --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-snpfilter \x1b[32m# Run the model with example data.\x1b[0m\n'
+            ' prst snpfilter -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-snpfilter --pred                  \x1b[32m# A shorter version of previous that also does the '
+            'predictions.\x1b[0m\n',
+  'module': 'prstools.models._ext',
+  'pkwargs': {'linkdata': {'args': ['--linkdata'], 'kwargs': {'help': None, 'type': NoneType, 'default': None}},
+              'pop': {'args': ['--pop'], 'kwargs': {'help': 'The LDGM reference population to us, choices are AFR, AMR, EAS, EUR, SAS.', 'type': str, 'default': 'EUR'}},
+              'keep': {'args': ['--keep'], 'kwargs': {'help': "path for a tsv text file with a 'SNP' column which will be the snps that will be kept.", 'type': NoneType, 'default': None}},
+              'seed': {'args': ['--seed'], 'kwargs': {'help': 'Random seed for reproducibility.', 'type': int, 'default': 'SUPPRESS'}},
+              'includecols': {'args': ['--includecols'], 'kwargs': {'help': "e.g. ['P'] or ['SE'] or ['SE','P']", 'type': list, 'default': ['SE', 'P']}},
+              'mafcut': {'args': ['--mafcut'], 'kwargs': {'help': 'mafcut param', 'type': float, 'default': 0.01}},
+              'stdmatching': {'args': ['--stdmatching'], 'kwargs': {'help': 'Whether to do standard deviation matching or not.', 'type': bool, 'default': False}},
+              'clear_linkdata': {'args': ['--clear_linkdata'], 'kwargs': {'help': None, 'type': bool, 'default': True}},
               'pbar': {'args': ['--pbar'], 'kwargs': {'help': None, 'type': bool, 'default': True}},
               'verbose': {'args': ['--verbose'], 'kwargs': {'help': None, 'type': bool, 'default': False}}},
   'subtype': 'BasePred'}]
