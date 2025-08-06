@@ -68,18 +68,11 @@ prstools
     Models & Utility Commands:
      <command>
       downloadutil  Download and unpack LD reference panels and other data.
-      xprs          XPRS: A very fast `eXPReSs` infitessimal effect-size prediction method that can
-                    estimate heritabilty on the fly.
-      prscs2        PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes
-                    under continuous shrinkage (CS) priors.
-      sprscs        SPRS-CS: A polygenic prediction method that uses sparse LDGMs to infers posterior
+      combine       Yap yap yap new stuff
+      xprs          XPRS: A very fast `eXPReSs` infitessimal effect-size
+                    prediction method that can estimate heritabilty on the fly.
+      prscs2        PRS-CS v2: A polygenic prediction method that infers posterior
                     SNP effect sizes under continuous shrinkage (CS) priors.
-      predprs       PredPRS: It predict polygenic risk scores if you give it weights (aka. give it the
-                    files produced by the methods in PRSTOOLS)
-      prscsx        PRS-CSx (original): A cross-population polygenic prediction method with continuous
-                    shrinkage (CS) priors trained with multiple GWAS summary statistics.
-      prscs         PRS-CS (original): A polygenic prediction method with continuous shrinkage (CS)
-                    priors trained with GWAS summary statistics.
 
 <br> By combining `prstools` with another `<command>` a specific model
 or other functionality can be used.
@@ -91,68 +84,108 @@ prst prscs2
 
 
     Usage:
-     prst prscs2 [-h  --cpus <number-of-cpus>] --ref <dir/refcode> --target <bim-prefix> --sst
-                       <file> --n_gwas <num> --out <dir> [--chrom <chroms>  --n_iter <n_iter>]
-                       [--n_burnin <n_burnin>  --n_slice <n_slice>  --shuffle  --seed <seed>]
-                       [--a <a>  --b <b>  --phi <phi>  --clip <clip>  --sampler <sampler>]
-                       [--compute_score  --pbar <pbar>  --verbose]
+     prst prscs2 [-h  --cpus <number-of-cpus>] --ref <dir/refcode> --target
+                       <bim-prefix> --sst <file> --out <dir+prefix>
+                       [--n_gwas <num>  --chrom <chroms>]
+                       [--colmap <alternative_colnames>  --pred]
+                       [--n_iter <n_iter>  --n_burnin <n_burnin>]
+                       [--n_slice <n_slice>  --seed <seed>  --a <a>  --b <b>]
+                       [--phi <phi>  --clip <clip>  --sampler <sampler>]
 
     PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.
 
     General Options:
      -h, --help                               Show this help message and exit.
-     -c, --cpus <number-of-cpus>              The number of cpus to use. This will generate
-                                              environmental variables inside of the python session,
-                                              which will control the number of used cores.
-                                              Functionality can be turned-off completely, by setting
+     -c, --cpus <number-of-cpus>              The number of cpus to use. Generally
+                                              most efficient if chosen to be
+                                              between 1 and 5. Functionality can
+                                              be turned-off completely by setting
                                               it to -1. (default: 1)
 
     Data Arguments (first 5 required):
-     -r, --ref_dir, --ref <dir/refcode>       Path to the directory that contains the LD reference
-                                              panel. You can download this reference data manually
-                                              with 'prstools downloadref'. Soon it will be possible to
-                                              automatically download it on the fly. (required)
-     -t, --bim_prefix, --target <bim-prefix>  Specify the directory and prefix of the bim file for the
-                                              target dataset. (required)
-     -s, --sst_file, --sst <file>             The summary statistics file from which the model will be
-                                              created. The file should contain columns SNP, A1, A2, P
-                                              and BETA or OR (in this order). SNP should contain
-                                              rsid's. See https://tinyurl.com/sstxampl for an
+     -r, --ref_dir, --ref <dir/refcode>       Path to the directory that contains
+                                              the LD reference panel. You can
+                                              download this reference data
+                                              manually with 'prstools
+                                              downloadref'. Soon it will be
+                                              possible to automatically download
+                                              it on the fly. (required)
+     -t, --bim_prefix, --target <bim-prefix>  Specify the directory and prefix of
+                                              the bim file for the target dataset.
+                                              (required)
+     -s, --sst_file, --sst <file>             The summary statistics file from
+                                              which the model will be created. The
+                                              file should contain columns: SNP,
+                                              A1, A2, BETA or OR, P or SE
+                                              information. At the moment, the file
+                                              is assumed to be tab-seperated, if
+                                              you like other formats please let
+                                              devs know.Alternative column names
+                                              can be specified with --columns
+                                              (more info below). SNP column should
+                                              contain rsid's. See https://tin
+                                              yurl.com/sstxampl for an
                                               example. (required)
-     -n, --n_gwas <num>                       Sample size of the GWAS (required)
-     -o, --out_dir, --out <dir>               Output prefix for the results (variant weights). This
-                                              should be a combination of the desired output dir and
-                                              file prefix. (required)
-     --chrom <chroms>                         Optional: Chromosomes to include. You can specify
-                                              multiple by using a separting comma e.g. "--chrom
-                                              1,2,3". (default: range(1, 23))
+     -o, --out_dir, --out <dir+prefix>        Output prefix for the results
+                                              (variant weights). This should be a
+                                              combination of the desired output
+                                              dir and file prefix. (required)
+     -n, --n_gwas <num>                       Sample size of the GWAS. Not
+                                              required if sumstat has a 'N'
+                                              column. (default: None)
+     --chrom <chroms>                         Optional: Select specific chromosome
+                                              to work with. You can specify a
+                                              specific chromosome as e.g. "--chrom
+                                              3". All chromosomes are used by
+                                              default. (default: all)
+     --colmap <alternative_colnames>          Optional: Allows one to specify an
+                                              alterative column name for the
+                                              internally used columns
+                                              snp,A1,A2,beta,or,pval,se_beta,n_eff
+                                              (in that order). Forinstance "--
+                                              colmap rsid,a1,a2,beta_gwas,,pvalue,
+                                              beta_standard_error," (OR & N are
+                                              excluded in this example). When the
+                                              command is run a quick this_column
+                                              -> that_column conversion table will
+                                              be shown. Additionaly prstools has
+                                              many internal checks to make sure a
+                                              good PRS will be generated! By
+                                              default this is the PRS-CS standard.
+                                              (default: SNP,A1,A2,BETA,OR,P,SE,N)
+     --pred, -p                               Optional: Add this argument to
+                                              predict the PRS for the induviduals
+                                              in the target dataset.
 
     Model Arguments (all optional):
-     --n_iter <n_iter>                        Total number of MCMC iterations, using 1 chain. woot.
+     --n_iter <n_iter>                        Total number of MCMC iterations.
                                               (default: 1000)
-     --n_burnin <n_burnin>                    Number of burn-in iterations. (default: 500)
-     --n_slice <n_slice>                      Thinning of the Markov chain. (default: 1)
-     --shuffle                                Whether to shuffle the data before fitting the model.
-     --seed <seed>                            Random seed for reproducibility. (default: -1)
-     --a <a>                                  Parameter a in the gamma-gamma prior. (default: 1.0)
-     --b <b>                                  Parameter b in the gamma-gamma prior. (default: 0.5)
-     --phi <phi>                              Global shrinkage parameter phi. If phi is not specified,
-                                              it will be learnt from the data using a Bayesian
-                                              approach (default: -1.0)
-     --clip <clip>                            Clip parameter. (default: 1.0)
-     --sampler <sampler>                      Sampler algorithm. Rue sampling is the original sampler.
-                                              (default: Rue)
-     --compute_score                          Compute the log marginal likelihood at each iteration of
-                                              the optimisation.
-     --pbar <pbar>                            Display a progress bar during optimization. (default:
-                                              True)
-     --verbose                                Verbose mode when fitting the model.
+     --n_burnin <n_burnin>                    Number of burn-in iterations if
+                                              larger than 1 or fraction of n_iter
+                                              if smaller then 1. (default: 0.5)
+     --n_slice <n_slice>                      Thinning of the Markov chain.
+                                              (default: 1)
+     --seed <seed>                            Random seed for reproducibility.
+                                              (default: -1)
+     --a <a>                                  Parameter a in the gamma-gamma
+                                              prior. (default: 1.0)
+     --b <b>                                  Parameter b in the gamma-gamma
+                                              prior. (default: 0.5)
+     --phi <phi>                              Global shrinkage parameter phi. If
+                                              phi is not specified, it will be
+                                              learnt from the data using a
+                                              Bayesian approach (default: -1.0)
+     --clip <clip>                            Clip parameter. The default works
+                                              best in pretty much all cases.
+                                              (default: 1.0)
+     --sampler <sampler>                      Sampler algorithm. Rue sampling is
+                                              the original sampler, which gives
+                                              good results. (default: Rue)
 
-    Examples -> can be directly copy pasted (:
-     prst downloadutil --pattern example --destdir ./; cd example                                                          # Makes 'example' dir in current path.
-     prstools prscs2 --ref_dir ldref_1kg_pop --bim_prefix target --sst_file sumstats.tsv  --n_gwas 2565 --out_dir ./result # Run the model with example data.
-     prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565  -o ./result                                  # A shorter version of previous command.
-     plink --bfile target --out prspred --keep-allele-order --score ./result_* 2 4 6                                         # Make predictions from weights (plink must be installed).
+    Examples --> can be directly copy-pasted (:
+     prst downloadutil --pattern example --destdir ./; cd example                                                # Makes 'example' dir in current path.
+     prstools prscs2 --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-prscs2 # Run the model with example data.
+     prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-prscs2 --pred                  # A shorter version of previous that also does the predictions.
 
 As can be seen, there are examples at the end of the help output to
 illustrate usage, which should work with a simple copy-paste.
