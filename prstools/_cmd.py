@@ -332,7 +332,7 @@ if '_isdevenv_prstools' in locals() or '--dev' in sys.argv:
         except: _ext_cli_selection = []
         extra = [getattr(models,elem) for elem in _ext_cli_selection]
         store_argparse_dicts([DownloadUtil, Combine,
-                              XPRS, PRSCS2 #, PredPRS 
+                              PRSCS2 #, PredPRS 
                               ] + extra)
         print('Saved new argparse dict. (mind: dont forget the suppress mechanism, this is something in the argparse-dict processing)')
     except Exception as e: 

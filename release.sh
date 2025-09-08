@@ -16,6 +16,9 @@ cd ../prstools
 nbdev_bump_version
 cd "$ORIG_DIR"
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
+cd ./prstools
+python ./_cmd.py --dev
+cd "$ORIG_DIR"
 
 git add -u
 git commit -m "automatic release"
