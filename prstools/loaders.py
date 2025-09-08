@@ -1377,9 +1377,9 @@ if True:
         return conv_dt
     
     def get_chrom_lst(chrom):
-        if '*' in chrom and chrom != '*':
+        if type(chrom) is str and '*' in chrom and chrom != '*':
             raise NotImplementedError(f'Cannot work with {chrom=} yet, this is not implemented.')
-        if chrom in ['*','all']: chrom = list(range(26))
+        if type(chrom) is str and chrom in ['*','all']: chrom = list(range(26))
         if type(chrom) is str:
             cmap = get_chrom_map() # This cmap allows chrom=X or MT to be mapped to their number.
             chrom = [int(cmap.get(elem, elem)) for elem in chrom.split(',')]
@@ -1890,6 +1890,8 @@ if True:
         if bim:
             if check: assert bim_df.head(testnrows).isna().sum().sum()==0, 'NaN detected in bim dataframe.'
             if not pd.api.types.is_numeric_dtype(bim_df['chrom']):
+                cmap = get_chrom_map()
+                bim_df["chrom"] = bim_df["chrom"].replace(cmap)
                 bim_df['chrom'] = pd.to_numeric(bim_df['chrom'], errors='coerce').astype('Int64')
             if not chrom in ['*','all']:
                 #ind = bim_df['chrom'] == bim_df['chrom'].dtype.type(chrom) # old one 
@@ -2117,10 +2119,12 @@ if True:
             raise Exception('not implementeed alternative storage options.')
             
         fn = fn.format_map(dict(ftype=ftype)) # Maybe some AutoDict buzz here later.
+        import uuid; tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"  # unique temp file name
         if verbose: print(f'Saving sumstats to: {fn}', end=' ')
         conv_dt = prst.loaders.get_conv_dt(flow='out')
         out_df = sst_df.rename(columns=conv_dt)[outcols]
-        out_df.to_csv(fn, sep=sep, index=False, header=header)
+        out_df.to_csv(tmp_fn, sep=sep, index=False, header=header)
+        os.replace(tmp_fn, fn) # atomically move into place
         if verbose: print(f'-> Done')
         if return_sst: return out_df
         
@@ -2135,8 +2139,10 @@ if True:
             raise ValueError(f"'{ftype}' is not a valid filetype/ftype. only 'prspred.tsv' availabe atm")
             
         fn = fn.format_map(dict(ftype=ftype)) # Maybe some AutoDict buzz here later.
+        import uuid; tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"  # unique temp file name
         if verbose: print(f'Saving prediction (i.e. PRS) to: {fn}', end=' ')
-        to_file(fn, sep=sep, index=False)
+        to_file(tmp_fn, sep=sep, index=False)
+        os.replace(tmp_fn, fn) # atomically move into place
         if verbose: print(f'-> Done', end=end)
         
 if not '__file__' in locals():

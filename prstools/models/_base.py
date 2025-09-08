@@ -199,7 +199,7 @@ class BasePred(ABC):
         mainout_fn = out_fnfmt.format_map(dict(ftype=ftype))
         if os.path.isfile(mainout_fn):
 #             msg = f"\033[1;31mWARNING:\033[0m The file {mainout_fn} already exists! If this code finishes, it will be overwritten."
-            msg = f"\033[1;31mWARNING: {mainout_fn} already exists! If you let this code finishs, it will be overwritten.\033[0m"
+            msg = f"\033[1;31mWARNING: {mainout_fn} already exists! If you let this code finish, it will be overwritten.\033[0m"
             #msg = f'WARNING: The file {mainout_fn} already exists! If this code finishes it will be overwritten.'
             warnings.warn(msg)
         if prstlogs:
@@ -232,14 +232,15 @@ class BasePred(ABC):
             raise Exception('Model weight file saving format could not be properly determined.')
             
         fn = fn.format_map(dict(ftype=ftype)) # Maybe some AutoDict buzz here later.
+        import uuid; tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"  # unique temp file name
         if self.verbose: print(f'Saving model weights (filetype={ftype}) to: {fn}', end=' ')
         if nancheck: assert np.sum(self.get_weights()['allele_weight'].isna().sum()) == 0
         fin_df = self.get_weights()[selcols]
-        if ftype.endswith('prstweights.h5'): pd.DataFrame(fin_df.to_numpy(), index=fin_df.index, columns=fin_df.columns).to_hdf(fn,key='df')
-        elif ftype.endswith('prstweights.parquet'): fin_df.to_parquet(fn)
-        else: fin_df.to_csv(fn, sep='\t', index=False, header=header)
+        if ftype.endswith('prstweights.h5'): pd.DataFrame(fin_df.to_numpy(), index=fin_df.index, columns=fin_df.columns).to_hdf(tmp_fn, key='df')
+        elif ftype.endswith('prstweights.parquet'): fin_df.to_parquet(tmp_fn)
+        else: fin_df.to_csv(tmp_fn, sep='\t', index=False, header=header)
+        os.replace(tmp_fn, fn) # atomically move into place
         if self.verbose: print(f'-> Done', end=end)
-            
         if return_weights: return df
         
     def save_sst(self, fn, return_sst=False, ftype='tsv', basecols=None, addicols=None, nancheck=False):
