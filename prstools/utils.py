@@ -407,7 +407,7 @@ class Combine(AutoPRSTCLI): #, AutoPRSTSubparser):
 #     pass
     
     '''\
-    Yap yap yap new stuff
+    A tool to combine genetics-related text files.
     '''
     
     

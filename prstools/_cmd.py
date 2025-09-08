@@ -141,7 +141,7 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
     for i, spkwg in enumerate(subparserkwg_lst):
         if spkwg['subtype'] == 'BasePred':
             # Create Model parser and add basic help:
-            basemodels = ['prscs2', 'xprs']
+            basemodels = ['prscs2']
             model_parser = subparser.add_parser(spkwg['cmdname'], 
                                                 help=spkwg['help'] if spkwg['cmdname'] in basemodels else argparse.SUPPRESS,
                                                 description=spkwg['description'],
@@ -332,7 +332,7 @@ if '_isdevenv_prstools' in locals() or '--dev' in sys.argv:
         except: _ext_cli_selection = []
         extra = [getattr(models,elem) for elem in _ext_cli_selection]
         store_argparse_dicts([DownloadUtil, Combine,
-                              PRSCS2 #, PredPRS 
+                              PRSCS2 , PredPRS 
                               ] + extra)
         print('Saved new argparse dict. (mind: dont forget the suppress mechanism, this is something in the argparse-dict processing)')
     except Exception as e: 
