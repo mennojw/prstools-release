@@ -10,7 +10,7 @@ echo 'CREATING NEW PRSTOOLS RELEASE'
 # This release.sh code pulls code from private dev-repo and pushes it to release github and pypi
 # and immediately tests it.
 # Later a dynamic with a bleeding edge version needs to be incorporated.
-# Also a small benchmark experiment should be part of the tests
+# Also a small benchmark experiment should be part of the tests  
 
 cd ../prstools
 nbdev_bump_version
