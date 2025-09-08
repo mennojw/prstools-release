@@ -12,11 +12,11 @@ echo 'CREATING NEW PRSTOOLS RELEASE'
 # Later a dynamic with a bleeding edge version needs to be incorporated.
 # Also a small benchmark experiment should be part of the tests  
 
+pip install -e ./ | tail -5
 cd ../prstools
 nbdev_bump_version
 cd "$ORIG_DIR"
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
-pip install -e ./ | tail -5
 cd ./prstools
 python ./_cmd.py --dev
 cd "$ORIG_DIR"
