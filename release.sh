@@ -15,6 +15,8 @@ git add -u
 git commit -m "automatic release"
 git push
 nbdev_pypi
+pip install -U prstools
+pytest --pyargs prstools
 
 
 
