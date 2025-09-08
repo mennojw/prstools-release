@@ -12,7 +12,7 @@ echo 'CREATING NEW PRSTOOLS RELEASE'
 # Later a dynamic with a bleeding edge version needs to be incorporated.
 # Also a small benchmark experiment should be part of the tests  
 
-pip install -e ./ | tail -5
+pip install -e ./
 cd ../prstools
 nbdev_bump_version
 cd "$ORIG_DIR"
@@ -25,7 +25,7 @@ git add -u
 git commit -m "automatic release"
 git push
 nbdev_pypi
-pip install -U prstools
+pip install prstools
 pytest -v -s --pyargs prstools
 
 
