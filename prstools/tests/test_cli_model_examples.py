@@ -41,6 +41,6 @@ def test_model_epilog_examples_run():
 #             print(f"$ {cmd}")
 #             print(result.stdout)
             print('NOW TO ASSERT')
-            assert result.returncode == 0, f"Command failed: {cmd}\n{result.stdout}"
+            assert proc.returncode == 0, f"Command failed: {cmd}\n{proc.stdout}"
         finally:
             os.chdir(cwd)
