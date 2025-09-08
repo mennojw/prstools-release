@@ -18,20 +18,28 @@ def test_model_epilog_examples_run():
         os.chdir(tmpdir)
         try:
             cmd = "\n".join(commands)
-#             for cmd in commands:
-                
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
             cmd = ansi_escape.sub('', cmd)
-            print(cmd, flush=True)
-            print('JKHKJHKJHKJH'*5,flush=True)
-            result = subprocess.run(
+            print(f"$ {cmd}\n", flush=True)
+            print('--<=>--'*5, flush=True)            
+            with subprocess.Popen(
                 cmd, shell=True,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True
-            )
-            print(f"$ {cmd}")
-            print(result.stdout)
-            print(result)
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1  # line-buffered
+            ) as proc:
+                for line in proc.stdout:
+                    print(line, end='', flush=True)
+                proc.wait()
+                retcode = proc.returncode
+#             result = subprocess.run(
+#                 cmd, shell=True,
+#                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+#                 text=True
+#             )
+#             print(f"$ {cmd}")
+#             print(result.stdout)
             print('NOW TO ASSERT')
             assert result.returncode == 0, f"Command failed: {cmd}\n{result.stdout}"
         finally:
