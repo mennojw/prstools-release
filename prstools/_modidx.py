@@ -3,7 +3,7 @@
 d = { 'settings': { 'branch': 'main',
                 'doc_baseurl': '/prstools',
                 'doc_host': 'https://mennowitteveen.github.io',
-                'git_url': 'https://github.com/mennojw/prstools',
+                'git_url': 'https://github.com/mennojw/prstools-release',
                 'lib_path': 'prstools'},
   'syms': { 'prstools.PRScs.PRScs': {},
             'prstools.PRScs.gigrnd': {},
