@@ -16,6 +16,7 @@ cd ../prstools
 nbdev_bump_version
 cd "$ORIG_DIR"
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
+pip install -e ./ | tail -5
 cd ./prstools
 python ./_cmd.py --dev
 cd "$ORIG_DIR"

@@ -326,7 +326,7 @@ if '_isdevenv_prstools' in locals() or '--dev' in sys.argv:
     from prstools import models, utils; import importlib
     importlib.reload(models); importlib.reload(utils)
     try:
-        from prstools.models import XPRS, PRSCS2, PredPRS
+        from prstools.models import PRSCS2, PredPRS
         from prstools.utils import DownloadUtil, store_argparse_dicts , Combine
         try: from prstools.models._ext import _ext_cli_selection
         except: _ext_cli_selection = []
