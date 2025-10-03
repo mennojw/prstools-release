@@ -31,7 +31,7 @@ nbdev_pypi
 
 # Test in a clean environment
 echo ">>> Testing in clean conda env"
-mamba create -y -n prstools_test python=3.11
+mamba create -y -n prstools_test python=3.6  -c https://prefix.dev/conda-forge -c https://prefix.dev/bioconda --override-channels
 source activate prstools_test
 pip install -U prstools
 pytest -v -s --pyargs prstools

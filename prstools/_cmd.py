@@ -281,7 +281,8 @@ def main(argv=None):
     cpu_display_string = set_cpu_envvars(cpus, output_string=True)
 
     # Initialize logs and grab certain parts:
-    from prstools.utils import get_prstlogs; import pandas as pd; import socket
+    from prstools.utils import get_prstlogs; 
+    import pandas as pd; import socket
     start = pd.Timestamp.now(); hostname = socket.gethostname(); cwd=os.getcwd()
     if 'seed' in args_dt.get('pkwargs',''):
         if not 'seed' in args_dt:
