@@ -338,6 +338,10 @@ class ResultsStorage():
         """
         self.write_string(report_string, fn='completed.txt')
         
+def get_ip():
+    import IPython as ip
+    return ip
+
 def get_memory_usage(show=True, prefix=''):
     # Checking for Open File Handles !!! 4 prst reflinkagedata issues
     #https://medium.com/brexeng/debugging-and-preventing-memory-errors-in-python-e00be55e7cf2

@@ -1,7 +1,7 @@
 #| export
-import os, json
+import os, json, time
 from prstools._ext_utils import *
-import warnings
+import warnings, threading
 from abc import ABC, abstractmethod
 try:
     from fastcore.script import call_parse, Param
@@ -18,7 +18,7 @@ def optional_import(path, name=None, default=None):
     except ImportError:
         return default
 
-def manhattan_plot(data_df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323):
+def plot_manhattan(data_df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323, palette='bright', aspect=4, s=6., **snskwg):
     import pandas as pd
     import numpy as np
     import seaborn as sns
@@ -30,11 +30,13 @@ def manhattan_plot(data_df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323):
             data_df = compute_pvalbetase(data_df, calc_lst=['pval'], pvalmin=pvalmin)
         data_df['-logp'] = -np.log10(data_df['pval'])
     if x is None: x = 'index'
-    plot = sns.relplot(data=data_df, x=x, y=y, aspect=4, hue=regcol, palette = 'bright', legend=None) 
+    plot = sns.relplot(data=data_df, x=x, y=y, aspect=aspect, hue=regcol, palette=palette, legend=None, s=s, **snskwg)
     chrom_df=data_df.groupby(regcol)[x].median()
     plot.ax.set_xlabel(regcol); plot.ax.set_xticks(chrom_df); plot.ax.set_xticklabels(chrom_df.index)
     plot.fig.suptitle('Manhattan plot')
     plt.show()
+    
+manhattan_plot = plot_manhattan
     
 def validate_path(*args, exists=False):
     newargs=[]
@@ -63,13 +65,108 @@ def get_timestring_from_td(td):
     m,s=divmod(s,60)
     return f'Completed in {h}h, {m}m and {s}s'
 
+# class FakeMultiprocPbar:
+#     """
+#     Manager-backed, multiprocess-safe lightweight progress counter.
+#     """
+#     def __init__(self):
+#         # Create the manager immediately so 'with' is optional
+#         from multiprocessing import Manager
+#         #self._manager = Manager()
+#         manager = Manager()
+#         self._val = manager.Value('i', 0)
+#         self._lock = manager.Lock()
+# #         self._val = self._manager.Value('i', 0)
+# #         self._lock = self._manager.Lock()
+
+#     # Context-manager hooks
+#     def __enter__(self):
+#         return self
+
+#     def __exit__(self, exc_type, exc, tb):
+#         self.close()           # ensure manager shuts down
+
+#     # Same API as before
+#     def update(self, n=1):
+#         with self._lock:
+#             self._val.value += n
+
+#     @property
+#     def n(self):
+#         with self._lock:
+#             return int(self._val.value)
+
+#     def close(self):
+#         """Release the Manager process (safe to call more than once)."""
+#         1
+# #         if self._manager is not None:
+# #             self._manager.shutdown()
+#             self._manager = self._val = self._lock = None
+
+class FakeMultiprocPbar:
+    def __init__(self, manager=None):
+        from multiprocessing import Manager
+        if manager is None:
+            mgr = Manager()
+            self._mgr = mgr # Internal management, which does not seem to work..
+        else: 
+            mgr = manager
+            self._mgr = None
+        self._val  = mgr.Value('i', 0)
+        self._lock = mgr.Lock()
+#         self._shutdown = mgr.shutdown      # plain function, not the Manager itself
+
+    def update(self, n=1):
+        with self._lock:
+            self._val.value += n
+            
+    def __exit__(self, exc_type, exc, tb):
+        self.close()           # ensure manager shuts down
+
+    @property
+    def n(self):
+        with self._lock:
+            return self._val.value
+
+    def close(self):
+        if self._mgr:
+            self.mgr.shutdown()
+            self._mgr = None
+
+
 def get_pbar(iterator, ncols=200, colour='green', bar_format='{l_bar}{bar:70}{r_bar}',
-             mininterval=0.5, desc=None, **kwg):
+             mininterval=0.5, desc=None, fakebar=None, deamon=False, **kwg):
     assert not 'total' in kwg, 'Need to use iterator, cannot use total argument.'
     create_pbar = get_tqdm()
     pbar = create_pbar(iterator, ncols=ncols, colour=colour,
           bar_format=bar_format,
           mininterval=mininterval, desc=desc, **kwg) 
+    
+    if deamon:
+        try: sleeptime = float(deamon)
+        except: sleeptime = 1.0
+        tot_iters = len(iterator)
+        stop_event = threading.Event()
+        def do_update():
+            if fakebar:
+                delta = (fakebar.n - pbar.n)
+            else: delta = -1
+            if delta > 0: pbar.update(delta)
+            else: pbar.refresh()
+        def monitor():
+            while not stop_event.is_set() and pbar.n < tot_iters:
+                do_update()
+                time.sleep(sleeptime)
+        t = threading.Thread(target=monitor, daemon=True)
+        t.start()
+        pbar._reall_close = pbar.close
+        def altclose(*args,**kwargs):
+            stop_event.set()
+            time.sleep(sleeptime)
+            do_update()
+            t.join(0.1)
+            return pbar._reall_close(*args,**kwargs)
+        pbar.close = altclose
     return pbar
 
 def save_to_interactive(dct=None, maxframes=20):
@@ -347,7 +444,8 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
             ["ldblk_ukbb_eas.tar.gz", "https://www.dropbox.com/s/fz0y3tb9kayw8oq/ldblk_ukbb_eas.tar.gz?dl=1", "UKBB EAS Population LD panel (~5.80G)"],
             ["ldblk_ukbb_eur.tar.gz", "https://www.dropbox.com/s/t9opx2ty6ucrpib/ldblk_ukbb_eur.tar.gz?dl=1", "UKBB EUR Population LD panel (~6.25G)"],
             ["ldblk_ukbb_sas.tar.gz", "https://www.dropbox.com/s/nto6gdajq8qfhh0/ldblk_ukbb_sas.tar.gz?dl=1", "UKBB SAS Population LD panel (~7.37G)"],
-            ["example.tar.gz", "https://www.dropbox.com/scl/fi/yi6lpbp0uhqiepayixvtj/example.tar.gz?rlkey=kvd7r17wuory9ucqdk4rh55jw&dl=1", "PRSTOOLS Example data (3.8M)"]
+            ["example.tar.gz", "https://www.dropbox.com/scl/fi/yi6lpbp0uhqiepayixvtj/example.tar.gz?rlkey=kvd7r17wuory9ucqdk4rh55jw&dl=1", "PRSTOOLS Example data (3.8M)"],
+            ["g1000.tar.gz",'https://www.dropbox.com/scl/fi/97lsbtoomhti3q6x2wttf/g1000.tar.gz?rlkey=9hd85oytgnpv6wvbapvu2rk2m&st=3k4fq9ub&dl=1', "European 1kg plink dataset for hapmap3 (~209M)"]
             #["example.tar.gz","https://www.dropbox.com/scl/fi/7fg6c9e5dnmb0n4cdfquz/example.tar.gz?rlkey=31u2948paz539uw61jq37oe8s&dl=1", "PRSTOOLS Example data (70mb)"] 
         ]
         columns = ["filename", "url", "description"]
@@ -369,8 +467,13 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
 
         # Downloading:
         print(f'\nDownloading LD reference data, which might take some time. Data will be stored in: {destdir}')
+        lst = []
         for idx, row in links_df.iterrows():
-            download_tar(row['url'], dn=destdir)
+            fn = os.path.join(os.path.expanduser(destdir), row['filename']); dn=fn.replace('.tar.gz','')
+            if os.path.isdir(dn): print(f'For {fn} the associated directory {dn} already exists,'
+                                        ' therefore download & unpack is skipped. Remove directory for a redownload.'); lst+=[False]; continue
+            download_tar(row['url'], dn=destdir); lst+=[True]
+        links_df = links_df[lst]
 
         # Untarring:
         print('\nFinished downloading all LD data. Now we need to unpack all the tar.gz files (takes some time to start):') 
@@ -388,7 +491,7 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
         for idx, row in links_df.iterrows():
             curfn = row['filename']
             if 'tar.gz' in curfn:
-                untar_file(os.path.join(destdir,curfn), destdir)
+                untar_file(os.path.join(destdir,curfn), destdir) 
 
         if not keeptar: print('Deleting the following files: ', end='')
         for idx, row in links_df.iterrows():
@@ -398,7 +501,7 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
                     os.remove(os.path.join(destdir, curfn))
                     print(curfn, end=', ')
                     
-        # Done:
+        # Done: 
         print('\nCompletely done with downloading & unpacking\n')
         return None
 

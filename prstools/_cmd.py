@@ -21,7 +21,7 @@ def set_cpu_envvars(cpus, output_string=True):
     else:
         True
     cpu_display_string = cpus if cpus != -1 else 'Not specified'
-    return cpu_display_string
+    return str(cpu_display_string)
         
 # This functioning is needed here, a lazy retrieval s.t. imports only happen when stuff is actually run:
 def retrieve_classmethod(*, clsname, methodname, modulename='prstools.models'):
@@ -289,6 +289,16 @@ def main(argv=None):
         seed = args_dt['seed']
         displayseed = f'Random seed:       {seed}'
     else: displayseed=None
+#     print( args_dt.get('pkwargs',''))
+    if 'n_jobs' in args_dt.get('pkwargs',''):
+#         import prstools as prst
+#         prst.utils.get_ip().embed()
+        if not 'n_jobs' in args_dt:
+            n_jobs = str(args_dt['pkwargs']['n_jobs']['kwargs']['default'])
+        else: n_jobs = str(args_dt['n_jobs'])
+        displaynjobs = f'Number of workers: {n_jobs} [--n_jobs]'
+        cpu_display_string = str(cpu_display_string) + ' (per worker)'
+    else: displaynjobs=None
     
     prstlogs = get_prstlogs()
     tic, toc = prstlogs.get_tictoc()
@@ -304,10 +314,11 @@ def main(argv=None):
         f'Working directory: {cwd}',
         f'Start time:        {start.strftime(timestampfmt)}',
         displayseed,        # skipping this if no seed
+        displaynjobs,
         f'Number of cpus:    {cpu_display_string}',
         f' '] if elem)
         print(envstr)
-    
+    ''
     # Run the actual task:
     args_dt['return_models'] = False
     result = args.func(**args_dt)

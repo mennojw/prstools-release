@@ -31,6 +31,7 @@ class BasePred(ABC):
     shuffle = False
     _clear_cache=True
     _close_pbar = True
+    _default_n_jobs=4
     
     def remove_cache(self):
         if hasattr(self,'cache_dt'):
@@ -140,14 +141,15 @@ class BasePred(ABC):
         #import IPython as ip; ip.embed() 
         if str(groupby) == '-1': groupby=False
         if groupby:
-            model = GroupByModel(cls(**kwg), groupby=groupby, verbose=kwg.get('verbose',False))
+            model = GroupByModel(cls(**kwg), groupby=groupby, verbose=kwg.get('verbose',False),
+                    **{key:item for key,item in kwg.items() if not key in ['verbose','groupby']})
         else:
             model = cls(**kwg, groupby=groupby)
         return model
     
     @classmethod
     def from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
-                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, pred=False, **kwargs):
+                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, pred=False, command=None, **kwargs):
         from prstools.loaders import RefLinkageData
         
         # Initialize model object(s) (multiple since hyperparam ranges, and maybe chroms):
@@ -180,14 +182,23 @@ class BasePred(ABC):
         if return_models: 
             return model
     
-        
+    @staticmethod
+    def basenaming(item):
+        if type(item) is str:
+            newitem = os.path.basename(item)
+            if newitem == '': newitem = os.path.basename(item.rstrip('/\\'))
+            if newitem == '': newitem = item 
+        else: newitem = item
+        return newitem
+    
     @staticmethod
     def create_output_fnfmt(*, cls, out, fnfmt, prstlogs=True, testsave=True, ftype=None, **kwg):
         assert testsave and prstlogs, 'testsave must be enable at this point'
         from prstools.utils import AutoDict
         mname = cls.__name__.lower()
         out_fnfmt = out + fnfmt
-        format_dt = AutoDict({**locals(),**kwg})
+        kwgkwg = {} if not 'kwargs' in kwg else kwg['kwargs']
+        format_dt = AutoDict({key: cls.basenaming(item) for key, item in {**locals(), **kwg, **kwgkwg}.items()})
         if 'ftype' in format_dt: format_dt.pop('ftype')
         out_fnfmt = out_fnfmt.format_map(format_dt)
         if testsave: # saving quick check, before lots of work is done
@@ -251,8 +262,10 @@ class BasePred(ABC):
                     nancheck=nancheck, verbose=self.verbose, **kwg)
         if return_sst: return out_df
     
-    def get_pbar(self, iterator, make_range_var=True, **kwg):
+    def get_pbar(self, iterator, *, make_range_var=True, **kwg):
         # Maybe import funny wrapper class
+        msg = f"Object implement iterator has no length. This is required. More info: {type(iterator)=} , {iterator=}"
+        assert hasattr(iterator, '__len__'), msg
         if make_range_var: # This is something we really want because we dont want a part of,
             # the linkdata to remain stuck in a pbar (and hence stuck in memory...)
             iterator = range(len(iterator))
@@ -584,9 +597,10 @@ class MultiPred():
 
         return model
     
+from joblib import Parallel, delayed 
 class GroupByModel(MultiPred, BasePred):
     
-    def __init__(self, _model, *, groupby, pbar:bool=True, verbose=False):
+    def __init__(self, _model, *, groupby, n_jobs=BasePred._default_n_jobs, pbar:bool=True, verbose=False, **xtras):
         
         # Stuff all the args into fields.
         _excl_lst = ['self', 'kwg_dt']
@@ -602,17 +616,35 @@ class GroupByModel(MultiPred, BasePred):
     def get_model_clone(self):
         return self._model.clone()
         
-    def fit(self):
+    def fitold(self):
+
         linkdata = self.get_linkdata()
         self.model_dt = dict()
+        
         def passthrough(arg):
             return arg
+        
         if self.verbose: print('Starting iterations of model(s):')
         assert type(self.groupby) is str, 'groupby must be string, if you want to use multiple columns combined then contact dev.'
+        
+        
+        
         nuniq = linkdata.get_sumstats_cur()[self.groupby].nunique()
         tot_iters = getattr(self._model,'n_iter',1)*nuniq
         pbar = self.get_pbar(iterator=range(tot_iters))
+        contents = {key: item for key, item in linkdata.groupby(self.groupby, sort=True, skipempty=True)}
+        del linkdata
+        self.remove_linkdata()
+        
         #  tqdm(linkdata.groupby(self.groupby, sort=True, skipempty=True), total=22)
+        # this loop in a multi processed way?
+        #prst.utils.get_ip().embed()
+        print(sys.argv)
+        if 'testmulti' in ' '.join(sys.argv) or '/opt/conda/lib/python3.11/site-packages/ipykernel_launcher.py' in ' '.join(sys.argv):
+            from prstools.utils import save_to_interactive; save_to_interactive(dict(loc_dt=locals()))
+            crash()
+         
+            
         for grp, cur_linkdata in linkdata.groupby(self.groupby, sort=True, skipempty=True):
             model = self.get_model_clone()
             model.verbose = False; model.pbar = pbar
@@ -621,9 +653,44 @@ class GroupByModel(MultiPred, BasePred):
             self.model_dt[grp] = model
         pbar.close(); self.pbar=True
         self.combine_set_weights()
-        
         return self
     
+    
+    def fit(self, linkdata=None):
+        
+        ## Prep portion
+        def worker(model, cur_linkdata, pbar, grp):
+            model.verbose = False
+            model.pbar = pbar
+            model.fit(cur_linkdata)
+            return grp, model
+        self.set_linkdata(linkdata, ignore_none=True)
+        linkdata = self.get_linkdata()
+        self.model_dt = dict()
+        if self.verbose: print('Starting iterations of model(s):')
+        assert type(self.groupby) is str, 'groupby must be string, if you want to use multiple columns combined then contact dev.'
+        nuniq = linkdata.get_sumstats_cur()[self.groupby].nunique()
+        tot_iters = getattr(self._model,'n_iter',1)*nuniq
+        contents = {key: item for key, item in linkdata.groupby(self.groupby, sort=True, skipempty=True)}
+        del linkdata; self.remove_linkdata()
+        
+        # MultiProcessing portion:
+        #with Manager() as manager:
+        fakebar = prst.utils.FakeMultiprocPbar(manager=None) if self.pbar else False
+        real_pbar = self.get_pbar(iterator=range(tot_iters), fakebar=fakebar, deamon=True) if self.pbar else False
+        if self.pbar: # Do fakebar hacks to make everything work
+            mgr = fakebar._mgr; fakebar._mgr=None
+        results = Parallel(n_jobs=self.n_jobs, max_nbytes=None)(
+            delayed(worker)(self.get_model_clone(), cur_linkdata, fakebar, grp)
+            for grp, cur_linkdata in contents.items())
+        if self.pbar: 
+            real_pbar.close(); real_pbar=None
+            prst.utils.clear_memory(); # Crucial line because gc.collect() inside, else thing go wrong later.
+            fakebar.close(); mgr.shutdown(); mgr=None
+        for grp, model in results: self.model_dt[grp] = model
+        self.combine_set_weights()
+        return self
+
     def combine_set_weights(self):
         assert hasattr(self,'model_dt'), f'No models present, so cannot create a working weights set for {self}.'
         weights_df = pd.concat([model.get_weights() for grp, model in self.model_dt.items()], axis=0) #for grp, model in self.model_dt.items():
@@ -678,12 +745,17 @@ class PredPRS(MultiPred, BasePred):
 
         return model
        
-
+try:
+    profile
+except NameError:
+    def profile(func):
+        return func
 
 class PRSCS2(BasePred):
     
     "PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors."
-        
+    _gig = None
+    
     def __init__(self, *,
          n_iter=1000,              # Total number of MCMC iterations.
          n_burnin=0.5,             # Number of burn-in iterations if larger than 1 or fraction of n_iter if smaller then 1.
@@ -699,7 +771,8 @@ class PRSCS2(BasePred):
          local_rm:bool=False,    
          compute_score:bool=False,   
          clear_linkdata:bool=True,
-         pop='pop', 
+         pop='pop',
+         n_jobs=BasePred._default_n_jobs, # This sets the number of jobs for parallel processing.
          pbar:bool=True,              
          verbose:bool=False): 
         
@@ -724,13 +797,22 @@ class PRSCS2(BasePred):
         self.pop = self.pop.upper()
         assert self.sampler in ['rue','bhat','sld']
     
+    
+#     def _gig(self, p,a,b, psi=None):
+#         x = np.zeros(b.shape) if psi is None else psi
+#         for j in range(b.shape[0]): # This loop gets everything back in shape. 
+#             x[j] = gigrnd(p, a[j], b[j])
+#             #psi[j] = gigrnd(a-0.5, 2.0*delta[j], n_eff*beta[j]**2/sigma)#, seed=seed)
+#         # else: raise ValueError(f"Option not recognized: {self.gigsampler}")
+#         return x
+    
     def _compute_beta_tilde(self, *, beta, i_reg, linkdata):
         beta_tilde = linkdata.get_beta_marginal_region(i=i_reg)
         if self.local_rm: # RM
             raise NotImplementedError()
         return beta_tilde
     
-    #@localdecor
+    @profile
     def fit(self, linkdata=None):
         
         # Loading variables:
@@ -770,6 +852,7 @@ class PRSCS2(BasePred):
                 if self.sampler == 'rue':
                     D = linkdata.get_linkage_region(i=i_reg)
                     dinvt = D + np.diag(1.0/psi[idx_reg].T[0])
+                    test = dinvt@beta_tilde
                     dinvt_chol = linalg.cholesky(dinvt)
                     beta_tmp = (linalg.solve_triangular(dinvt_chol, beta_tilde, trans='T') +
                                 np.sqrt(sigma/n_eff)*np.random.randn(len(D), 1))
@@ -812,8 +895,9 @@ class PRSCS2(BasePred):
             delta = np.random.gamma(a+b, 1.0/(psi+phi))
 
             # Sample Variance of the Weight prior:
-            for j in range(p):
-                psi[j] = gigrnd(a-0.5, 2.0*delta[j], n_eff*beta[j]**2/sigma)#, seed=seed)
+            if self._gig: psi = self._gig(a-0.5, 2.0*delta, n_eff*beta**2/sigma, psi=psi)
+            else:
+                for j in range(p): psi[j] = gigrnd(a-0.5, 2.0*delta[j], n_eff*beta[j]**2/sigma)
             if self.clip: psi[psi>self.clip] = self.clip #Clipping.
 
             # Sample Phi or continue with set value:

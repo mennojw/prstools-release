@@ -30,6 +30,8 @@ available) [install guide]() or send us a mail.
 
 ## How to use
 
+Next to this very brief discription of what `prstools` can do, there is
+a [Getting Started Tutorial](./tutorials/01_getting_started.ipynb).
 Immediately after installing `prstools`, it should be possible to
 download & run the demo example (~4mb), by pasting the following into
 the commandline:
@@ -50,58 +52,66 @@ for the example dataset.
 <br> More generally you can use `prstools` by typing into the
 command-line interface:
 
-``` sh
+``` bash
 prstools
 ```
 
+``` console
+Usage:
+ prstools <command> ...
 
-    Usage:
-     prstools <command> ...
+Convenient and powerfull Polygenic Risk Score creation. 
+'prst' is a commandline shorthand for 'prstools'
 
-    Convenient and powerfull Polygenic Risk Score creation. 
-    'prst' is a commandline shorthand for 'prstools'
+Models & Utility Commands:
+ <command>
+  downloadutil  Download and unpack LD reference panels and other data.
+  combine       A tool to combine genetics-related text files.
+  prscs2        PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes
+                under continuous shrinkage (CS) priors.
+```
 
-    Models & Utility Commands:
-     <command>
-      downloadutil  Download and unpack LD reference panels and other data.
-      combine       A tool to combine genetics-related text files.
-      prscs2        PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes
-                    under continuous shrinkage (CS) priors.
-
-<br><br> By combining `prstools` with another `<command>` a specific
-model or other functionality can be used. Forinstance typing
+<br> By combining `prstools` with another `<command>` a specific model
+or other functionality can be used. <br> Forinstance typing
 `prstools prscs2` will output a help for the prscs2 subcommand:
 
+``` console
+Usage:
+ prstools prscs2 [-h  --cpus <number-of-cpus>] --ref <dir/refcode> --target <bim-prefix>
+                       --sst <file> --out <dir+prefix> [--n_gwas <num>  --chrom <chroms>]
+                       [--colmap <alternative_colnames>  --pred  --n_iter <n_iter>]
+                       [--n_burnin <n_burnin>  --n_slice <n_slice>  --seed <seed>  --a <a>]
+                       [--b <b>  --phi <phi>  --clip <clip>  --sampler <sampler>]
 
-    Usage:
-     prstools prscs2 [-h  --cpus <number-of-cpus>] --ref <dir/refcode> --target <bim-prefix>
-                           --sst <file> --out <dir+prefix> [--n_gwas <num>  --chrom <chroms>]
-                           [--colmap <alternative_colnames>  --pred  --n_iter <n_iter>]
-                           [--n_burnin <n_burnin>  --n_slice <n_slice>  --seed <seed>  --a <a>]
-                           [--b <b>  --phi <phi>  --clip <clip>  --sampler <sampler>]
+PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.
 
-    PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.
+General Options:
+ -h, --help                               Show this help message and exit.
+ -c, --cpus <number-of-cpus>              The number of cpus to use. Generally most efficient if
+                                          chosen to be between 1 and 5. Functionality can be
 
-    General Options:
-     -h, --help                               Show this help message and exit.
-     -c, --cpus <number-of-cpus>              The number of cpus to use. Generally most efficient if
-                                              chosen to be between 1 and 5. Functionality can be
-
-    ... [omitted for readability] ...
+... [omitted for readability] ...
 
 
-     --clip <clip>                            Clip parameter. The default works best in pretty much
-                                              all cases. (default: 1.0)
-     --sampler <sampler>                      Sampler algorithm. Rue sampling is the original sampler,
-                                              which gives good results. (default: Rue)
+ --clip <clip>                            Clip parameter. The default works best in pretty much
+                                          all cases. (default: 1.0)
+ --sampler <sampler>                      Sampler algorithm. Rue sampling is the original sampler,
+                                          which gives good results. (default: Rue)
 
-    Examples --> can be directly copy-pasted (:
-     prst downloadutil --pattern example --destdir ./; cd example                                                # Makes 'example' dir in current path.
-     prstools prscs2 --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-prscs2 # Run the model with example data.
-     prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-prscs2 --pred                  # A shorter version of previous that also does the predictions.
+Examples --> can be directly copy-pasted (:
+ prst downloadutil --pattern example --destdir ./; cd example                                                # Makes 'example' dir in current path.
+ prstools prscs2 --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-prscs2 # Run the model with example data.
+ prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-prscs2 --pred                  # A shorter version of previous that also does the predictions.
+```
 
 As can be seen, there are examples at the end of the help output to
-illustrate usage, which should work with a simple copy-paste.
+illustrate usage, which should work with a simple copy-paste. <br> <br>
+
+## Tutorial
+
+For more information and a hands on demonstration of what `prstools` can
+do have a look at the [Getting Started
+Tutorial](./tutorials/01_getting_started.ipynb).
 
 ## Contact
 

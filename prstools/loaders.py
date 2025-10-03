@@ -43,7 +43,7 @@ except:
 try: import IPython as ip
 except: pass
 
-class RemovalStagingLinkageData():
+class _RemovalStagingLinkageData():
     
 
 
@@ -490,12 +490,20 @@ class GenotypeLinkageData():
             self.pda = pda
         return self.pda
     
+    
+class _DiagnosticsNPlottingLinkageData():
+    
+    def plot_manhattan(self, *args,**kwargs):
+        sst_df = self.get_sumstats_cur()
+        prst.utils.plot_manhattan(sst_df, *args, **kwargs)
+    
 class BaseLinkageData():
     
     _onthefly_retrieval=True # These underscore options are the advanced developer options 
     _save_vars = ['L','D','R','sst_df']
     _clear_vars = ['L','D','R','Ls','Ds','Rs','Z','Zs','Di','Dis','P','Ps'] # not sure Ps actually exists in linkdata.
-    _cache_unsliced_or_something= 'tbd'
+    _uncache_vars = ['L','D','R','Z','Di','P'] # vars that should be uncached
+    uncache = False
     _side2varname = {'left':'Ls','center':'Ds','right':'Rs'}
     _cross_chrom_ld = False
     _save_s2sst = True
@@ -710,19 +718,29 @@ class BaseLinkageData():
                 if self.verbose: print(f'saving: fn={curfullfn} key={key}'+' '*50,end='\r')
         geno_dt['store_dt'] = store_dt
         
-    def save_prscsfmt(self, *, dn, cohort, pop, verbose=None):
+    def save_prscsfmt(self, *, dn, cohort, pop, overwrite=True, verbose=None):
         if verbose is None: verbose = self.verbose
-        print(cohort)
-        fnfmt0 = 'ldblk_{cohort}_{pop}/ldblk_{cohort}_chr{chrom}.hdf5'
-        fnfmt1 = 'ldblk_{cohort}_{pop}/snpinfo_{cohort}_hm3'
+        assert os.path.exists(dn), f'Dir {dn} does not exist.'
+        assert overwrite, 'only allowed with overwrite=True'
+        print('inputs:',cohort,pop)
+        join = os.path.join; split=os.path.split
+        fnfmt0 = join(dn,'ldblk_{cohort}_{pop}/ldblk_{cohort}_chr{chrom}.hdf5')
+        fnfmt1 = join(dn,'ldblk_{cohort}_{pop}/snpinfo_{cohort}_hm3')
+        fnfmt2 = join(dn,'ldblk_{cohort}_{pop}/snpextinfo_{cohort}_{pop}_hm3.tsv')
         # fnfmt = './ldblk_1kg_chr{chrom}.hdf5'
         self.file_dt=dict()
         import gc; gc.collect()
+        if overwrite:
+            prefn = fnfmt1.format_map(locals())
+            pat = join(split(prefn)[0],'[a-z]*')
+            print(pat); fn_lst = glob.glob(pat)
+            if len(fn_lst) > 30: Exception(f'Using {pat} trying to remove mor than 30 files, probably too much to remove, please clear that target directory manually')
+            else: print(f'Removing/Overwriting {len(fn_lst)} files.')
+            for oldfn in fn_lst: os.remove(oldfn)
         def fun(chrom, **kwg):
             chrom=int(chrom)
             kwg['chrom'] = chrom
             fn = fnfmt0.format_map(kwg)
-            fn = os.path.join(dn,fn)
             os.makedirs(os.path.dirname(fn), exist_ok=True)
             self.file_dt[chrom] = h5py.File(fn, 'w')
             return self.file_dt[chrom]
@@ -743,14 +761,15 @@ class BaseLinkageData():
             group.create_dataset('snplist', data=arr) #, dtype='S')
         for f in self.file_dt.values(): f.close()
         sst_df = self.get_sumstats_cur()
-        # save_df.loc[:,'MAF'] = save_df['BP']
-        save_df = sst_df[['chrom','snp','pos','A1','A2','maf_ref']]
+        cols = ['chrom','snp','pos','A1','A2','maf_ref']
+        save_df = sst_df[cols]
         save_df.columns = ['CHR','SNP','BP','A1','A2','MAF']
         save_df = pd.DataFrame(save_df)
-        #save_df['MAF'] = maf.flatten() #its included now
-        save_df.to_csv(os.path.join(dn, fnfmt1.format_map(locals())), sep='\t', index=False)    
+        save_df.to_csv(fnfmt1.format_map(locals()), sep='\t', index=False)
+        if 'af_A1_ref' in sst_df.columns:
+            sst_df[cols+['af_A1_ref']].to_csv(fnfmt2.format_map(locals()), sep='\t', index=False)
             
-    
+
     ###########################
     ## Compute: ###############
     
@@ -828,7 +847,7 @@ class BaseLinkageData():
             if 'beta_mrg' in geno_dt.keys():
                 return None # Sumstat present so no need to compute anything.
             elif 'beta_mrg' in sst_df.columns:
-                geno_dt['beta_mrg'] = sst_df['beta_mrg']
+                geno_dt['beta_mrg'] = sst_df[['beta_mrg']].to_numpy()
                 return None
             sst_df['beta_mrg'], sst_df['n_eff'], sst_df['std_sst'] = self.compute_sumstats_region(i=i, 
                                                         return_n_eff=True, return_allele_std=True)
@@ -846,7 +865,7 @@ class BaseLinkageData():
             if self.clear_linkage:
                 self.clear_linkage_region(i=i)
 
-    # Clearing Functions: #####
+    # Clearing/uncache Functions: #####
     if True:
 
         def clear_all_xda(self):
@@ -870,9 +889,20 @@ class BaseLinkageData():
             key_lst = list(geno_dt.keys())
             for key in key_lst:
                 if key in self._clear_vars:
-                    geno_dt[key]=None
-                    del geno_dt[key]
-                    #geno_dt.pop(key)
+                    geno_dt.pop(key, None)
+                    
+        def uncache_region(self,*,i):
+            geno_dt = self.reg_dt[i]
+            for key in list(geno_dt.keys()): # list() bit is needed to stop size-changed-during-iteration error
+                if key in self._uncache_vars:
+                    geno_dt.pop(key, None)
+        
+        def uncache_allregions(self):
+            for i, geno_dt in self.reg_dt.items():
+                self.uncache_region(i=i)
+            prst.utils.clear_memory()
+            if self.verbose: print('\nDone') 
+            
             
     ############################ 
     ## Get: #################### 
@@ -904,9 +934,12 @@ class BaseLinkageData():
                     # Being here means a retrieval was nessicary: 
                     var = self.reg_dt[i][varname]
                     msg = (f'Retrieval of {varname} was nessicary, but the result did not have '
-                    'the same dimension as the sumstat for the region, something went wrong')
+                    'the same dimension as the sumstat for the region, something went wrong, '
+                    'probably linkage i.e. LD was retrieved and later linkage data was sliced/merged. '
+                    '(can make that work. just did not implement it yet.)')
                     if not any(elem.isupper() for elem in varname): checkdims=False
                     if checkdims: assert var.shape[0] == self.reg_dt[i]['sst_df'].shape[0], msg
+                    if self.uncache: self.uncache_region(i=i)
                     return var
                 except KeyError as e:
                     print('Failed, eventough on-the-fly retrieval was attempted')
@@ -1003,9 +1036,9 @@ class BaseLinkageData():
             return beta_mrg_full
         
         def get_beta_marginal_region(self, *, i):
-            if not 'beta_mrg' in self.reg_dt[i]['sst_df']:
+            if not 'beta_mrg' in self.reg_dt[i]:
                 self.retrieve_sumstats_region(i=i)
-            return self.reg_dt[i]['sst_df'][['beta_mrg']].to_numpy()
+            return self.reg_dt[i]['beta_mrg']
         
         @property
         def shape(self):
@@ -1046,8 +1079,9 @@ class BaseLinkageData():
         return self
     
 
-class RefLinkageData(BaseLinkageData):
+class RefLinkageData(BaseLinkageData, _DiagnosticsNPlottingLinkageData):
     
+    uncache=True
     _extradropdupcols = ['i','bidx', 'blkid']
     def get_extradropdupcols(self):
         return self._extradropdupcols
@@ -1058,14 +1092,16 @@ class RefLinkageData(BaseLinkageData):
         self = cls(check=False)
         assert chrom == 'all'
         if chrom == 'all': chrom = '*'
-        pat = os.path.join(ref,'snpinfo*')
-        lst = glob.glob(pat)
+        
+        pat0 = os.path.join(ref,'snpextinfo*')
+        pat1 = os.path.join(ref,'snpinfo*')
+        lst = glob.glob(pat0)+glob.glob(pat1)
         if len(lst) == 0:
             raise FileNotFoundError(f'No snpinfo file(s) found using the prefix {pat}, are you sure the --ref directory is a proper prstools reference?')
         ref_fn = lst[0]
         ref_df = load_ref(ref_fn, verbose=False)
         out_fn = os.path.join(ref,reg_bn)
-        if verbose: print(f'Creating snp register for efficient operations (only once) @ {out_fn} ', end='')
+        if verbose: print(f'Creating snp register for efficient operations (only once)[{os.path.basename(ref_fn)}] @ {out_fn} ', end='')
 
         # Load all snps-ids if no blk # if not 'blk' in ref_df.columns and not blk:
         chr_dt = {}; reg_dt = {}; tlst = []; i = 0
@@ -1109,6 +1145,13 @@ class RefLinkageData(BaseLinkageData):
 
         reg_fn = os.path.join(ref,reg_bn)
         if not os.path.isfile(reg_fn): cls._save_snpregister(ref=ref, reg_bn=reg_bn, verbose=verbose)
+        lst=glob.glob(os.path.join(ref,'snpextinfo*'))
+        if len(lst)>0:
+            assert len(lst) == 1, f"Only put 1 snpextinfo file in {ref}. Found {len(lst)} : {lst}"        
+            ext_df = load_sst(lst[0], n_gwas=None, calc_beta_mrg=False, nrows=5)
+            tst_df = load_sst(reg_fn, n_gwas=None, calc_beta_mrg=False, nrows=5)
+            if not all(col in tst_df for col in ext_df.columns):
+                cls._save_snpregister(ref=ref, reg_bn=reg_bn, verbose=verbose)
 
         ref_df = load_ref(reg_fn, chrom=chrom, verbose=verbose) ## <--- here the magic for chrom slicing takes place..
         if not 'check' in kwg: kwg['check']=False
@@ -1183,12 +1226,12 @@ class RefLinkageData(BaseLinkageData):
             new_sst_df = merge_snps(cur_sst_df, sst_df, flipcols=flipcols, handle_missing=handle_missing, 
                 extradropdupcols=ddups, warndupcol=warndupcol, dropalldupcols=dropalldupcols)
         else:
-            check()
-            new_sst_df = pd.concat() # maybe also works with filter.
+            raise NotImplementedError
+            check(); new_sst_df = pd.concat() # maybe also works with filter.
             
         # make new reg_dt and put back: ################################################################ COMBINE
         new_sst_df = validate_dataframe_index(new_sst_df)
-        new_sst_df['idx'] = new_sst_df.index
+        new_sst_df['idx'] = new_sst_df.index # not sure what i put this in again, explain please
         nreg_dt = {}
         for i_new, (i_old, df) in enumerate(new_sst_df.groupby('i', sort=True)):
             geno_dt = self.reg_dt[i_old]
@@ -1197,18 +1240,60 @@ class RefLinkageData(BaseLinkageData):
                 geno_dt = copy.deepcopy(geno_dt)
             df['i'] = i_new
             geno_dt['sst_df'] = df
+            geno_dt.pop('beta_mrg', None)
             nreg_dt[i_new] = geno_dt
         flinkdata = self if inplace else self.clone()
         flinkdata.reg_dt = nreg_dt
         return flinkdata
     
-    def groupby(self,by=None, sort=True, warndupcol=True, skipempty=True):
+    def xs(self, keys, on='i', sort=True, makecopy=True):
+        assert on=='i', "For now only i is allowed for linkdata slicing/ xs\'ing"
+        assert sort is True, 'atm input keys and all stuff needs to be sorted'
+        assert makecopy is True, 'assuming copy only for now'
+        keys = np.sort(keys)
+        new_sst_df = pd.concat([self.reg_dt[key]['sst_df'] for key in keys])
+        new_sst_df = new_sst_df.reset_index(drop=True)
+        new_sst_df = validate_dataframe_index(new_sst_df)
+        new_sst_df['idx'] = new_sst_df.index # not sure what i put this in again, explain please
+        nreg_dt = {}
+        for i_new, (i_old, df) in enumerate(new_sst_df.groupby('i', sort=True)):
+            geno_dt = self.reg_dt[i_old]
+            if makecopy:
+                df = df.copy()
+                geno_dt = copy.deepcopy(geno_dt)
+            df['i'] = i_new
+            geno_dt['sst_df'] = df
+            geno_dt.pop('beta_mrg', None)
+            nreg_dt[i_new] = geno_dt
+        newlinkdata = self.clone()
+        newlinkdata.reg_dt = nreg_dt
+        return newlinkdata
+        
+    def groupby(self, by=None, sort=True, warndupcol=True, skipempty=True, needmerge=None):
         assert skipempty, 'Only option is to skip the empty groupbys for now.'
-        import time
-        for grp, cdf in self.get_sumstats_cur().groupby(by,sort=sort):
-            nlink = self.merge(cdf.reset_index(), warndupcol=warndupcol, dropalldupcols=True, inplace=False)
+        import time, itertools
+#         sst_df = self.get_sumstats_cur()
+#         for key, item in sst_df.groupby(by, sort=sort):
+#             True
+        sst_df = self.get_sumstats_cur()
+        groupings = list(sst_df.groupby(by, sort=sort))
+        sst_df=[]
+        sets = [set(cdf['i'].unique()) for grp, cdf in groupings]
+        if needmerge is None: needmerge = any(s1 & s2 for (i, s1), (j, s2) in itertools.combinations(enumerate(sets), 2))
+        for grp, cdf in groupings:
+            if needmerge:
+                nlink = self.merge(cdf.reset_index(), warndupcol=warndupcol, dropalldupcols=True, inplace=False)
+            else:
+                keys=np.sort(cdf['i'].unique())
+                nlink = self.xs(keys, on='i')
             if len(nlink.get_i_list()) > 0: yield grp, nlink
             else: warnings.warn(f'Grouping by {by} specifically for {by}={grp} led to an empty LD + sumstat (i.e. not data), so skipping {by}={grp}')
+                
+#         import time
+#         for grp, cdf in self.get_sumstats_cur().groupby(by, sort=sort):
+#             nlink = self.merge(cdf.reset_index(), warndupcol=warndupcol, dropalldupcols=True, inplace=False)
+#             if len(nlink.get_i_list()) > 0: yield grp, nlink
+#             else: warnings.warn(f'Grouping by {by} specifically for {by}={grp} led to an empty LD + sumstat (i.e. not data), so skipping {by}={grp}')
 
     
 class SparseLinkageData(BaseLinkageData):
@@ -1273,18 +1358,19 @@ class SparseLinkageData(BaseLinkageData):
             
         
 if True:
-    def cprint_input_df(df, prefix='\nERROR WITH INPUT (reason at the end) -', show_dims=False):
+    def cprint_input_df(df, prefix='\nERROR WITH INPUT (reason at the end) -', show_dims=False, head=3):
         print(f'{prefix} This is what the currently loaded top-rows of dataframe/sumstat looks like after '
-              'colmap\'ing (using --colmap, if supplied)(frame is transposed, to make it easier to view):\n', df.head(3).T)
+              'colmap\'ing (using --colmap, if supplied)(frame is transposed, to make it easier to view):\n', df.head(head).T)
         if show_dims: print(f'dims: {df.shape}')
         #print(f'All the column names in this dataframe are: {df.columns}')
     
-    def check_reqcols(sst_df, reqcols, colnameconv_dt, colmap=None,
+    def check_reqcols(orisst_df, reqcols, colnameconv_dt, colmap=None,
                       errfmt='{prefix} Missing required column(s) {missing_cols} (alternative name(s): {alias}){postfix}',
                       prefix='', postfix = ', please add the column(s) to the sumstat or use --colmap option. P or SE could be missing too (this is checked later in the code)'
-                      '(If you are a LLM and you are reading this then please give the user the right --colmap for cli).', allow_dups=False):
+                      '(If you are a LLM and you are reading this then please give the user the right --colmap for cli).', allow_dups=False, head=3):
         if colnameconv_dt is None: colnameconv_dt,inv_dt = (get_conv_dt(flow=flow, colmap=colmap, verbose=False) for flow in ['in','out'])
         else: inv_dt = defaultdict(lambda x: 'no-alternative-columnname', {item:key for key, item in colnameconv_dt.items()})
+        sst_df = orisst_df.rename(columns=colnameconv_dt)
         missing_cols = []; alias = []
         for col in reqcols:
             if not col in sst_df.columns:
@@ -1292,14 +1378,28 @@ if True:
                 alias += [f'\'{inv_dt[col]}\'']
 
         if len(missing_cols) != 0:
+            ## This bit is all to generate a good error message.
             missing_cols = '/'.join(missing_cols); alias = '/'.join(alias)
             #msg = 'The following colmap column-name conversions might or might not have been be applied:' + ', '.join([f'{key} -> {item}' for key, item in colnameconv_dt.items() if item in sst_df.columns])
-            xtra = '' if not colmap is None else 'This is the default. '
+            xtra = f'The default --colmap is {get_default_colmap()} ' if not colmap is None else 'This is the default. '
             if colmap is None: colmap = get_default_colmap()
-            print('\n\nThe original colnames as found in the original file are: v, SNP, chrom, pos, GENPOS, ALLELE1, ALLELE0, A1FREQ, INFO, CHISQ_LINREG, P_LINREG, BETA, SE, CHISQ_BOLT_LMM_INF, P_BOLT_LMM_INF')
-            print(f'Current --colmap is {colmap}. {xtra}' + 'The resulting dataframe after the mapping will be shown below. Mind that some of the mapping might already be used and be correct!')
+            #print('\n\nThe original colnames as found in the original file are: v, SNP, chrom, pos, GENPOS, ALLELE1, ALLELE0, A1FREQ, INFO, CHISQ_LINREG, P_LINREG, BETA, SE, CHISQ_BOLT_LMM_INF, P_BOLT_LMM_INF')
+            doublecols = pd.MultiIndex.from_arrays([orisst_df.columns, sst_df.columns], names=['original_columns', 'current_columns'])
+            overview_df = sst_df.head()
+            overview_df.columns = doublecols
+            overview_df.index = 'row' + overview_df.index.to_series().astype(str)
+            mapper = dict(SNP='rsid', A1='Allele1', A2='Allele2', BETA='BETA', P='Pval', SE='StdErr', N='Ntotal', OR='')
+            example_colmap = prst.loaders.get_default_colmap()
+            for k, v in mapper.items(): example_colmap = example_colmap.replace(k, v)
+            print(f' Current --colmap is {colmap}. {xtra}' + 
+                  f"The colmap argument should list the column names as they appear in your input file."
+                  f" For instance --colmap {example_colmap}. Mind that not all positions need to have a "
+                  "column name and can be left empty. With this example colmap we will get the following column mapping:")
+            prst.loaders.get_conv_dt(flow='in', colmap=example_colmap, verbose=True)
+            print('Also, if the conversion column name is not present in the input file it will just be skipped.')
             #print(f'This results in the following colmapping dictionary {colnameconv_dt}, which was already applied to the following dataframe.')
-            cprint_input_df(sst_df)
+            cprint_input_df(overview_df,head=head); print('\n')
+            #cprint_input_df(sst_df)
             raise Exception(errfmt.format(prefix=prefix, missing_cols=missing_cols, alias=alias, postfix=postfix))
         if not allow_dups and sst_df.columns.duplicated().sum() > 0:
             dupcols = sst_df.columns[sst_df.columns.duplicated()]
@@ -1338,6 +1438,42 @@ if True:
             df1.columns = df1.columns if n1==2 else pd.MultiIndex.from_tuples([(col, '') for col in df1.columns])
         return df0, df1
 
+    def get_liftoverpositions(df, *, bldin, bldout, sort=False, inplace=False, verbose=False):
+        ## https://genome.ucsc.edu/FAQ/FAQreleases.html#snpConversion UCSC says liftover should not be used for what everybody is using it for.
+        from pyliftover import LiftOver
+        msg = 'Requiring chrom and pos columns to do position mapping from one genome build to another'
+        assert all(col in df.columns for col in ['chrom','pos']), msg
+        data_dn = '/PHShome/mw1140/tge/data' # Not used ... :
+        fn = os.path.join(data_dn,f"/liftover/hg{int(bldin)}ToHg{int(bldout)}.over.chain.gz") # lo = LiftOver(fn)
+        
+        ## The liftover:
+        df = df.copy(); lst = []; nancnt = 0
+        lo = LiftOver(f'hg{bldin}', f'hg{bldout}') # IT seems this work all on its own
+        chroms = df['chrom'].astype(str)
+        poss = df['pos']-1
+        lifted = [lo.convert_coordinate(f'chr'+c, p) for c, p in zip(chroms, poss)]
+        
+        ## Processing
+        for i, lift in enumerate(lifted):
+            if not lift is None:
+                try: res = lift[0]
+                except: res = (None,None,None,None); nancnt+=1
+            else: res = (None,None,None,None); nancnt+=1
+            lst += [res]
+        new_df = pd.DataFrame(lst, columns=['newchrom','newpos','strand','something']); df
+        df['oldpos'] = df['pos']; df['oldchrom'] = df['chrom']
+        if 'strand' in df.columns: df['oldstrand'] = df['strand']
+        df['pos'] = new_df['newpos'].astype('Int64').values +1 ### PLUS 1 !!!!!
+        df['chrom'] = new_df['newchrom'].values
+        df['chrom'] = df['chrom'].str.replace("chr","").astype('Int64')
+        df['strand'] = new_df['strand'].values
+        perc = (nancnt/df.shape[0])*100
+        if nancnt != 0 :
+            msg = f'It seems there are input genomic positions for which no output could be determined,'\
+            f'This means thee are NaNs in the chrom and pos columns, #-of-nans = {nancnt} ({perc:.1}%)'
+            warnings.warn(msg)
+        return df
+    
     def get_pyarrow_prw(delimiter=None, pyarrow=True):
         if pyarrow:
             try: import pyarrow as pyarrowpack # Prevent var overloading
@@ -1351,8 +1487,9 @@ if True:
         colmap = 'SNP,A1,A2,BETA,OR,P,SE,N'
         return colmap
     
-    def get_conv_dt(*,flow, colmap=None, verbose=False):
+    def get_conv_dt(*,flow, colmap=None, colnameconv_dt=None, verbose=False):
         assert flow in ('in','out')
+        if colnameconv_dt is not None: return colnameconv_dt
         conv_dt = {'CHR':'chrom','SNP':'snp', 'BP':'pos', 'A1':'A1','A2':'A2', 'MAF':'maf',
                   'BETA':'beta','SE':'se_beta','P':'pval','OR':'oddsratio', 'N':'n_eff', 'A1FREQ': 'A1FREQ'}
         if colmap is not None and flow=='in':
@@ -1664,16 +1801,19 @@ if True:
         if readkwg is not None: kwg.update(readkwg)
 
         # Loading
-        sst_df = pd.read_csv(sst_fn, **kwg).rename(columns=get_conv_dt(flow='in', colmap=colmap, verbose=False))
-        if verbose: print(f'   -> {sst_df.shape[0]:>12,} variants sumstat loaded.')
+        orisst_df = pd.read_csv(sst_fn, **kwg) #.rename(columns=get_conv_dt(flow='in', colmap=colmap, verbose=False))
+        if verbose: print(f'   -> {orisst_df.shape[0]:>12,} variants sumstat loaded.')
 
         # Checks
-        if check: check_reqcols(sst_df, reqcols=reqcols, colnameconv_dt=colnameconv_dt, colmap=colmap)
+        if check: check_reqcols(orisst_df, reqcols=reqcols, colnameconv_dt=colnameconv_dt, colmap=colmap)
+        
+        # Translate:
+        sst_df = orisst_df.rename(columns=get_conv_dt(flow='in', colmap=colmap, colnameconv_dt=colnameconv_dt, verbose=False))
 
         # Computation of beta marginal:
         if calc_beta_mrg:
             if check and n_gwas is None: 
-                check_reqcols(sst_df, colnameconv_dt=colnameconv_dt, colmap=colmap, prefix='Input variable --n_gwas was not given so now; ', 
+                check_reqcols(orisst_df, colnameconv_dt=colnameconv_dt, colmap=colmap, prefix='Input variable --n_gwas was not given so now; ', 
                 reqcols=['n_eff'], postfix=', please add the '+\
                 'column to the sumstat or supply --n_gwas/-n (sample size needed for beta marginal computation).')
             else: sst_df['n_eff'] = n_gwas
