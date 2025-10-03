@@ -34,6 +34,7 @@ echo ">>> Testing in clean conda env"
 mamba create -y -n prstools_test python=3.8 -c https://prefix.dev/conda-forge -c https://prefix.dev/bioconda --override-channels
 conda activate prstools_test
 pip install -U prstools
+pip install pytest
 pytest -v -s --pyargs prstools
 conda deactivate
 mamba env remove -n prstools_test -y
