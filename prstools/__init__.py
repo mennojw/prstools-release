@@ -1,5 +1,5 @@
-__version__ = "0.0.33"
-_date = "18-02-2025"
+__version__ = "0.0.35"
+_date = "03-10-2025"
 # from . import *
 
 # from . import models
