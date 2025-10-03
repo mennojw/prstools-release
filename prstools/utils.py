@@ -409,7 +409,7 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
     
     '''\
     Download and unpack LD reference panels and other data.
-    The files that can be downloaded and unpacked with this command includes the standard reference files for PRS-CS and PRS-CSx.
+    The files that can be downloaded and unpacked with thirs command includes the standard reference files for PRS-CS and PRS-CSx.
     Additional information can be found at https://github.com/getian107/PRScsx
     '''
     
@@ -565,7 +565,7 @@ class Combine(AutoPRSTCLI): #, AutoPRSTSubparser):
         extra = f'Removed {oldlen-len(fn_lst)} with antiglob (e.g. with *.log extension)' if oldlen-len(fn_lst) > 0 else ''
         #print(fn_lst)
         if verbose: print(f'The number of input is {len(fn_lst)}, now processing them. {extra}')
-        if reqlen: assert len(fn_lst) == reqlen, f'The required number of files ({reqlen=}) is not present, so this code is exiting.'
+        if reqlen: assert len(fn_lst) == reqlen, f'The required number of files (reqlen={reqlen}) is not present, so this code is exiting.'
         if pyarrow: # pyarrow mechanics
             try: import pyarrow as pyarrowpack # Prevent var overloading
             except: pyarrow = False
@@ -607,7 +607,7 @@ class Combine(AutoPRSTCLI): #, AutoPRSTSubparser):
         if verbose: print(df)
         
         # More checks:
-        assert df.shape[1] == ncols[0], (f'Oke so the {df.shape[1]=}, which means the input '
+        assert df.shape[1] == ncols[0], (f'Oke so the df.shape[1]={df.shape[1]}, which means the input '
             'files must have different column names. modify the column names s.t. they are the same.')
         if assertunique:
             if not (set(assertunique) - set(df.columns)):

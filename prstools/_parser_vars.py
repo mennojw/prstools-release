@@ -3,7 +3,7 @@ NoneType = type(None)
 subparserkwg_lst = [{'cmdname': 'downloadutil',
   'clsname': 'DownloadUtil',
   'description': 'Download and unpack LD reference panels and other data.\n'
-                 'The files that can be downloaded and unpacked with this command includes the standard reference files for PRS-CS and PRS-CSx.\n'
+                 'The files that can be downloaded and unpacked with thirs command includes the standard reference files for PRS-CS and PRS-CSx.\n'
                  'Additional information can be found at https://github.com/getian107/PRScsx\n',
   'help': 'Download and unpack LD reference panels and other data.',
   'epilog': None,

@@ -8,7 +8,7 @@ LinkageData
 durr tst
 """
 
-import os, re
+import os, re, sys
 import scipy as sp
 import numpy as np
 import pandas as pd
@@ -1113,7 +1113,8 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsNPlottingLinkageData):
             chr_dt[cur_chrom] = hdf_chr
             for num in range(1,len(hdf_chr)+1):
                 blkid = f'blk_{num}'
-                snps = np.array(hdf_chr[blkid]['snplist'], dtype=str)
+                snps = np.array(hdf_chr[blkid]['snplist'].asstr()[:])
+                #snps = np.array(hdf_chr[blkid]['snplist'], dtype=str) # Old version no 3.6 compat.
                 dt = {0:snps,'i':i,'blkid':blkid,'bidx':np.arange(len(snps))}
                 sst_df = pd.DataFrame(dt)
                 h5 = hdf_chr[blkid]['ldblk']
@@ -1182,7 +1183,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsNPlottingLinkageData):
         # Basic checks:
         tsttarget = '.'.join(target.split('.')[:-1])+'.bim' if (target.split('.')[-1] in ('bim','fam','bed')) else target+'.bim'
         prst.utils.validate_path(ref, sst, tsttarget, exists=True) # Deliberately no redefining, all funs should be able to validate paths on their own.
-        msg=f'Population argument specified ({pop=}), but for this approach this information is currently not used.'
+        msg=f'Population argument specified (pop={pop}), but for this approach this information is currently not used.'
         if pop is not None and pop != 'pop': warnings.warn(msg)
         prstlogs = prst.utils.get_prstlogs()
         tic, toc = prstlogs.get_tictoc()
@@ -1477,8 +1478,20 @@ if True:
     def get_pyarrow_prw(delimiter=None, pyarrow=True):
         if pyarrow:
             try: import pyarrow as pyarrowpack # Prevent var overloading
-            except: pyarrow = False
+            except: 
+                msg = 'It seems \'pyarrow\' is not installed, which means you are missing out on a' + \
+                    ' lot of speed. Consider installing it using \'pip install pyarrow\' for super fast data loading.'
+                warnings.warn(msg)
+                pyarrow = False
             if delimiter == '\s+': pyarrow=False
+            try:
+                from io import StringIO
+                pd.read_csv(
+                    StringIO("a,b\n1,2"),
+                    dtype_backend="pyarrow",
+                    engine="pyarrow")
+            except:
+                pyarrow=False
         if pyarrow:
             return dict(dtype_backend="pyarrow", engine='pyarrow')
         else: return dict()
@@ -1515,7 +1528,7 @@ if True:
     
     def get_chrom_lst(chrom):
         if type(chrom) is str and '*' in chrom and chrom != '*':
-            raise NotImplementedError(f'Cannot work with {chrom=} yet, this is not implemented.')
+            raise NotImplementedError(f'Cannot work with chrom={chrom} yet, this is not implemented.')
         if type(chrom) is str and chrom in ['*','all']: chrom = list(range(26))
         if type(chrom) is str:
             cmap = get_chrom_map() # This cmap allows chrom=X or MT to be mapped to their number.
@@ -1646,7 +1659,7 @@ if True:
                 missing_keys = list(df1_keys - merged_keys)
                 n_miss = len(missing_keys)
                 if missing_keys:
-                    msg = f'mind {req_all_right = }, if you want to drop variants weights '+\
+                    msg = f'mind req_all_right = {req_all_right}, if you want to drop variants weights '+\
                     '(typically not a good thing to do) set req_all_right=False ' if req_all_right else ''
                     raise ValueError(f"Not all SNPs from df1 were matched. Missing keys (n={n_miss}): {missing_keys[:5]}.. ")
             
@@ -1697,7 +1710,7 @@ if True:
                 n_dups = mrg_df.shape[0] - new_df.shape[0]
                 inject = ' but not removed '
                 if removedups: mrg_df = new_df; inject=' and removed '
-                warnings.warn(f'Duplicates detected{inject}in sumstat {n_dups=}.')
+                warnings.warn(f'Duplicates detected{inject}in sumstat n_dups={n_dups}.')
                     
         if reset_index: mrg_df = validate_dataframe_index(mrg_df, warn=False) 
         if seperate: raise NotImplementedError()
@@ -1775,7 +1788,7 @@ if True:
         
         #if 'body_HEIGHTz.sumstats' in sst_fn:
         #    return other_read_sst(sst_fn, dtype_backend="pyarrow", engine='pyarrow')
-        
+#         ergerhe
             
         # Preps:
         try: import pyarrow as pyarrowpack # Prevent var overloading
@@ -1793,7 +1806,7 @@ if True:
         if pyarrow:
             if delimiter is None: kwg.update(delimiter='\t')
             else: kwg.update(delimiter=delimiter)
-            if nrows is None: kwg.update(dtype_backend="pyarrow", engine='pyarrow')
+            if nrows is None: kwg.update(get_pyarrow_prw())
         elif delimiter is None:
             kwg.update(delimiter='\s+')
         else: kwg.update(delimiter=delimiter)
@@ -1818,7 +1831,14 @@ if True:
                 'column to the sumstat or supply --n_gwas/-n (sample size needed for beta marginal computation).')
             else: sst_df['n_eff'] = n_gwas
             #with supresswarning() if thisisthepretest else allnormal:
-            from contextlib import nullcontext
+            #from contextlib import nullcontext
+            import contextlib
+            if sys.version_info < (3, 7):
+                @contextlib.contextmanager
+                def nullcontext(enter_result=None):
+                    yield enter_result
+            else:
+                from contextlib import nullcontext
             with (warnings.catch_warnings(record=True) if ispretest else nullcontext()):
                 sst_df = compute_beta_mrg(sst_df, calc_beta_mrg=calc_beta_mrg, ispretest=ispretest,
                           slicenans=slicenans, verbose=verbose, cli=cli)
@@ -1886,7 +1906,7 @@ if True:
         if len(file_lst) == 0: raise Exception(f'No files found using: search_string={matchstr} \n' + \
             'Perhaps the directory for the ldgm reference is not right?')
         chroms = set()
-        for edge_fn in tqdm(file_lst, desc=f"Loading LD data ({pop=})", ncols=ncols):
+        for edge_fn in tqdm(file_lst, desc=f"Loading LD data (pop={pop})", ncols=ncols):
             # Parse the key
             key = os.path.split(edge_fn)[-1].split('.')[0]
             curchrom = int(re.search(r'_chr(\d+)_', key).group(1)); chroms.add(curchrom)
@@ -1919,7 +1939,7 @@ if True:
         snp_df = (pd.concat([item['snp_df'] for key, item in comb_dt.items()]).reset_index(names=['blkidx']).drop_duplicates('site_ids'))  # There are variants assigned to two blocks (seemingly @ the edges)
         sst_df = sst_df.drop_duplicates('snp', keep='first') # Removing dups, there are multi-allelic snps in this sumstat. We will only use the first one for now. later this can be removed, allow for multall
         msst_df = pd.merge(snp_df, sst_df, left_on='site_ids', right_on='snp', how='inner', suffixes=("", "_sst")) #60% faster
-        if verbose: print(f'Total of {msst_df.shape[0]:,} variants after selecting chromosome(s) ({chrom=}) and matching with reference.')
+        if verbose: print(f'Total of {msst_df.shape[0]:,} variants after selecting chromosome(s) (chrom={chrom}) and matching with reference.')
         # %time r=snp_df.site_ids.isin(sst_df.snp) # might offer a speedup at some point time=3.4 s
 
         # Allele merging & phasing
@@ -2044,7 +2064,7 @@ if True:
             n_snps_end = bim_df.shape[0]
         if verbose:
             lst=[]
-            if bim: inject = f', selecting {n_snps_end:,} with {chrom=}' if 'ind' in locals() and ind.shape != bim_df.shape[0] else ''
+            if bim: inject = f', selecting {n_snps_end:,} with chrom={chrom}' if 'ind' in locals() and ind.shape != bim_df.shape[0] else ''
             if bim: lst += [f'{n_snps_start:>12,} variants bim file loaded{inject}']
             if fam:
                 #if fam_df.shape[0] == fam_df['fid'].nunique():
@@ -2073,10 +2093,10 @@ if True:
                 if not hasattr(now_srd, 'filename'):
                     if hasattr(now_srd, '_internal'):
                         now_srd = now_srd._internal
-                    else: raise Exception(f'{srd=} does not have a filename attribute, perhaps its not the right input type (srd = pysnptools.SnpReaDer())')
+                    else: raise Exception(f'srd={srd} does not have a filename attribute, perhaps its not the right input type (srd = pysnptools.SnpReaDer())')
                 else: break
             else: 
-                raise Exception(f'maximum depth of 20 exceeded for {srd=}')
+                raise Exception(f'maximum depth of 20 exceeded for srd={srd}')
             toc('staring load bimfam')
             bim_df, fam_df = load_bimfam(now_srd.filename,verbose=verbose,end=' ',**kwg) # costly line: 37% (implement pyarrow..)
             toc('done laoding bimfam')

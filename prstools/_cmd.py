@@ -170,8 +170,8 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                         help="Specify the directory and prefix of the bim file for the target dataset.")))
             data_group.add_argument("--sst","--sst_file","-s", **prc(dict(required=True, metavar='<file>', 
                         help="The summary statistics file from which the model will be created. The file should contain columns: SNP, A1, A2, BETA or OR, P or SE information. "
-                              "At the moment, the file is assumed to be tab-seperated, if you like other formats please let devs know."
-                             f"Alternative column names can be specified with --columns (more info below). SNP column should contain rsid\'s. "
+                              "At the moment, the file is assumed to be tab-seperated, if you like other formats please let devs know. "
+                             f"Alternative column names can be specified with --colmap (more info below). SNP column should contain rsid\'s. "
                              f"See {format_color('https://tinyurl.com/sstxampl','34')} for an example.")))
             data_group.add_argument("--out","--out_dir","-o", 
                     **prc(dict(required=True, metavar='<dir+prefix>', 
@@ -273,6 +273,7 @@ def main(argv=None):
             pitem = item if type(item) is not bool else ''
             print('  --%s %s' % (key, pitem))
         print()
+    else: print(f'PRSTOOLS v{__version__} ({_date})')
 
     args_dt = vars(args)
     # Need to happen here because it needs to happen before numpy/scipy is imported:

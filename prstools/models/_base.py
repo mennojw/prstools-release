@@ -264,7 +264,7 @@ class BasePred(ABC):
     
     def get_pbar(self, iterator, *, make_range_var=True, **kwg):
         # Maybe import funny wrapper class
-        msg = f"Object implement iterator has no length. This is required. More info: {type(iterator)=} , {iterator=}"
+        msg = f"Object implement iterator has no length. This is required. More info: type(iterator)={type(iterator)} , iterator={iterator}"
         assert hasattr(iterator, '__len__'), msg
         if make_range_var: # This is something we really want because we dont want a part of,
             # the linkdata to remain stuck in a pbar (and hence stuck in memory...)
