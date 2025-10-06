@@ -1,4 +1,4 @@
-__version__ = "0.0.47"
+__version__ = "0.0.48"
 _date = "06-10-2025"
 # from . import *
 
