@@ -453,7 +453,7 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
 
         # Preprocessing:
         if list: # Overloading list is bad practice, I know.
-            print('\nFiles available for downloading & unpacking:\n')
+            print('\nFiles available for downloading & unpacking (if following is difficult to read consider making terminal temporarily wider):\n')
             print(links_df.to_string(index=False, justify="left"))
             return True
         if not pattern == 'ALL':
