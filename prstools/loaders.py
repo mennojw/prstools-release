@@ -1113,7 +1113,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsNPlottingLinkageData):
             chr_dt[cur_chrom] = hdf_chr
             for num in range(1,len(hdf_chr)+1):
                 blkid = f'blk_{num}'
-                snps = np.array(hdf_chr[blkid]['snplist'].asstr()[:])
+                snps = np.array(hdf_chr[blkid]['snplist'][:])
                 #snps = np.array(hdf_chr[blkid]['snplist'], dtype=str) # Old version no 3.6 compat.
                 dt = {0:snps,'i':i,'blkid':blkid,'bidx':np.arange(len(snps))}
                 sst_df = pd.DataFrame(dt)
