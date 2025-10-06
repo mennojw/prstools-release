@@ -21,17 +21,19 @@ To install use the following command.
 pip install -U prstools
 ```
 
-It contains a special read-only access key, since this repo is still
-private, which can be shared with people that should have access. <br>
-If this did not work there is a chance you need to install `pip`, which
-can be done most easily with conda by typing `conda install pip`. For
-other install issues please check the (install guide is not yet
-available) [install guide]() or send us a mail.
+For it to work, you should have python3.8 or later installed (`pip` is
+included in python3.8+). If the command above does not work directly you
+can install installed using `conda` (or `mamba` if you have that), by
+running `conda install "python>=3.9"` For other install issues please
+check the (install guide is still pretty basic) [install
+guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_install_guide.ipynb)
+or send us a mail.
 
 ## How to use
 
 Next to this very brief discription of what `prstools` can do, there is
-a [Getting Started Tutorial](./tutorials/01_getting_started.ipynb).
+a [Getting Started
+Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 Immediately after installing `prstools`, it should be possible to
 download & run the demo example (~4mb), by pasting the following into
 the commandline:
@@ -111,7 +113,7 @@ illustrate usage, which should work with a simple copy-paste. <br> <br>
 
 For more information and a hands on demonstration of what `prstools` can
 do have a look at the [Getting Started
-Tutorial](./tutorials/01_getting_started.ipynb).
+Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 
 ## Contact
 

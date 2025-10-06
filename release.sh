@@ -14,14 +14,16 @@ echo 'CREATING NEW PRSTOOLS RELEASE'
 
 pip install -e ./
 cd ../prstools
+nbdev_prepare
 nbdev_bump_version
 TODAY=$(date +%d-%m-%Y)
 sed -i '' "s/^_date = .*/_date = \"$TODAY\"/" prstools/__init__.py
 cd "$ORIG_DIR"
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
-cd ./prstools
-python ./_cmd.py --dev
+cd ./prstools  # ok the order of all this seems funny, but im not gonna change it for now
+python ./_cmd.py --dev # its probably fixing discrepancies between prstools and prstools-release
 cd "$ORIG_DIR"
+
 
 # Commiting and push to github & pypi
 git add -u
