@@ -32,11 +32,12 @@ or send us a mail.
 ## How to use
 
 Next to this very brief discription of what `prstools` can do, there is
-a [Getting Started
+also more complete [Getting Started
 Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 Immediately after installing `prstools`, it should be possible to
 download & run the demo example (~4mb), by pasting the following into
-the commandline:
+the commandline (if not see
+[guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/00_install_guide.ipynb)):
 
 ``` bash
 # Makes 'example' dir with data in current path:
