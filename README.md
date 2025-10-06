@@ -26,7 +26,7 @@ included in python3.8+). If the command above does not work directly you
 can install installed using `conda` (or `mamba` if you have that), by
 running `conda install "python>=3.9"` For other install issues please
 check the (install guide is still pretty basic) [install
-guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_install_guide.ipynb)
+guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/00_install_guide.ipynb)
 or send us a mail.
 
 ## How to use
