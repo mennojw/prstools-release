@@ -116,7 +116,8 @@ For more information and a hands on demonstration of what `prstools` can
 do have a look at the [Getting Started
 Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 Or load that same tutorial in a free cloud instance by clicking here:
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/mennojw/prstools-release/main?labpath=tutorials/01_getting_started.ipynb)
+[![Google
+Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 
 ## Contact
 

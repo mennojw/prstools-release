@@ -445,7 +445,7 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
             ["ldblk_ukbb_eur.tar.gz", "https://www.dropbox.com/s/t9opx2ty6ucrpib/ldblk_ukbb_eur.tar.gz?dl=1", "UKBB EUR Population LD panel (~6.25G)"],
             ["ldblk_ukbb_sas.tar.gz", "https://www.dropbox.com/s/nto6gdajq8qfhh0/ldblk_ukbb_sas.tar.gz?dl=1", "UKBB SAS Population LD panel (~7.37G)"],
             ["example.tar.gz", "https://www.dropbox.com/scl/fi/yi6lpbp0uhqiepayixvtj/example.tar.gz?rlkey=kvd7r17wuory9ucqdk4rh55jw&dl=1", "PRSTOOLS Example data (3.8M)"],
-            ["g1000.tar.gz",'https://www.dropbox.com/scl/fi/97lsbtoomhti3q6x2wttf/g1000.tar.gz?rlkey=9hd85oytgnpv6wvbapvu2rk2m&st=3k4fq9ub&dl=1', "European 1kg plink dataset for hapmap3 (~209M)"]
+            ["g1000.tar.gz",'https://www.dropbox.com/scl/fi/97lsbtoomhti3q6x2wttf/g1000.tar.gz?rlkey=9hd85oytgnpv6wvbapvu2rk2m&st=3k4fq9ub&dl=1', "European 1kg plink dataset for hapmap3 (~64M)"]
             #["example.tar.gz","https://www.dropbox.com/scl/fi/7fg6c9e5dnmb0n4cdfquz/example.tar.gz?rlkey=31u2948paz539uw61jq37oe8s&dl=1", "PRSTOOLS Example data (70mb)"] 
         ]
         columns = ["filename", "url", "description"]
@@ -466,7 +466,7 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
             if mkdir: raise Exception(f'\nIt appears the supplied --destdir does not exist, please create: {destdir}')
 
         # Downloading:
-        print(f'\nDownloading LD reference data, which might take some time. Data will be stored in: {destdir}')
+        print(f'\nDownloading data, which might take some time. Data will be stored in: {destdir}')
         lst = []
         for idx, row in links_df.iterrows():
             fn = os.path.join(os.path.expanduser(destdir), row['filename']); dn=fn.replace('.tar.gz','')

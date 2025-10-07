@@ -176,21 +176,21 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             data_group.add_argument("--out","--out_dir","-o", 
                     **prc(dict(required=True, metavar='<dir+prefix>', 
                         help="Output prefix for the results (variant weights). This should be a combination of the desired output dir and file prefix.")))
-            data_group.add_argument("--n_gwas","-n", 
+            data_group.add_argument("--n_gwas","-n",
                     **prc(dict(required=False, type=int, metavar='<num>', default=None,
                         help="Sample size of the GWAS. Not required if sumstat has a 'N' column.")))
             data_group.add_argument("--chrom", #lambda x: x.split(',')
                     **prc(dict(required=False,type=str, metavar='<chroms>', default='all', 
                         help="Optional: Select specific chromosome to work with. You can specify a specific chromosome as e.g. \"--chrom 3\". All chromosomes are used by default.")))
             data_group.add_argument("--colmap", #lambda x: x.split(',')
-                        type=str, metavar='<alternative_colnames>', # Allows one to specify an alterative column name for columns SNP,A1,A2,BETA,OR,P,SE,N (in that order). "
+                        type=str, metavar='<colnames>', # Allows one to specify an alterative column name for columns SNP,A1,A2,BETA,OR,P,SE,N (in that order). "
                         help="Optional: Allows one to specify an alterative column name for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff (in that order). "
                                     "Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,\" (OR & N are excluded in this example). "
                                     "When the command is run a quick this_column -> that_column conversion table will be shown. "
                                     "Additionaly prstools has many internal checks to make sure a good PRS will be generated! By default this is the PRS-CS standard. (default: SNP,A1,A2,BETA,OR,P,SE,N)")
             data_group.add_argument("--pred", "-p", 
-                                    action='store_true',
-                                    help="Optional: Add this argument to predict the PRS for the induviduals in the target dataset.")
+                                    type=str, default='try',
+                                    help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset (no/try/yes).")
 
             # Add model-related arguments (hyper parameters and such):
             modelargs_group = model_parser.add_argument_group('Model Arguments (all optional)')
