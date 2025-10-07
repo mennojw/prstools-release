@@ -82,10 +82,9 @@ subparserkwg_lst = [{'cmdname': 'downloadutil',
   'description': 'PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.',
   'help': 'PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.',
   'epilog': 'Examples --> can be directly copy-pasted (:\n'
-            " prst downloadutil --pattern example --destdir ./; cd example                                                \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
+            " prst downloadutil --pattern example --destdir ./; cd example                                               \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
             ' prstools prscs2 --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-prscs2 \x1b[32m# Run the model with example data.\x1b[0m\n'
-            ' prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-prscs2 --pred                  \x1b[32m# A shorter version of previous that also does the '
-            'predictions.\x1b[0m\n',
+            ' prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-prscs2                          \x1b[32m# A shorter version of previous.\x1b[0m\n',
   'module': 'prstools.models._base',
   'pkwargs': {'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Total number of MCMC iterations.', 'type': int, 'default': 1000}},
               'n_burnin': {'args': ['--n_burnin'],
@@ -116,10 +115,9 @@ subparserkwg_lst = [{'cmdname': 'downloadutil',
                  'PredPRS.from_weights()).',
   'help': '(not implemented yet) PredPRS: It predict polygenic risk scores if you give it weights (aka. give it the files produced by the methods in PRSTOOLS)(internal: PredPRS.from_weights()).',
   'epilog': 'Examples --> can be directly copy-pasted (:\n'
-            " prst downloadutil --pattern example --destdir ./; cd example                                                 \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
+            " prst downloadutil --pattern example --destdir ./; cd example                                                \x1b[32m# Makes 'example' dir in current path.\x1b[0m\n"
             ' prstools predprs --ref ldref_1kg_pop --target target --sst sumstats.tsv --n_gwas 2565 --out ./result-predprs \x1b[32m# Run the model with example data.\x1b[0m\n'
-            ' prst predprs -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-predprs --pred                  \x1b[32m# A shorter version of previous that also does the '
-            'predictions.\x1b[0m\n',
+            ' prst predprs -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-predprs                          \x1b[32m# A shorter version of previous.\x1b[0m\n',
   'module': 'prstools.models._base',
   'pkwargs': {'pbar': {'args': ['--pbar'], 'kwargs': {'help': '[not functional yet] Display a progress bar during optimization.', 'type': bool, 'default': True}},
               'verbose': {'args': ['--verbose'], 'kwargs': {'help': 'Verbose mode when fitting the model.', 'type': bool, 'default': False}}},

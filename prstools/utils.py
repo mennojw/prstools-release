@@ -476,7 +476,7 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
         links_df = links_df[lst]
 
         # Untarring:
-        print('\nFinished downloading all LD data. Now we need to unpack all the tar.gz files (takes some time to start):') 
+        print('\nFinished downloading all data. Now we need to unpack all the tar.gz files (takes some time to start):') 
         def untar_file(archive_path, destination):
             with tarfile.open(archive_path, 'r:gz') as tar:
                 file_names = tar.getnames()

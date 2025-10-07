@@ -188,9 +188,8 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                                     "Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,\" (OR & N are excluded in this example). "
                                     "When the command is run a quick this_column -> that_column conversion table will be shown. "
                                     "Additionaly prstools has many internal checks to make sure a good PRS will be generated! By default this is the PRS-CS standard. (default: SNP,A1,A2,BETA,OR,P,SE,N)")
-            data_group.add_argument("--pred", "-p", 
-                                    type=str, default='try',
-                                    help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset (no/try/yes).")
+            data_group.add_argument("--pred", "-p", **prc(dict(required=False,metavar='<yes/no>',type=str, default='yes',
+                                    help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset (yes/no).")))
 
             # Add model-related arguments (hyper parameters and such):
             modelargs_group = model_parser.add_argument_group('Model Arguments (all optional)')

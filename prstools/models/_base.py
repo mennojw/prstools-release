@@ -66,10 +66,11 @@ class BasePred(ABC):
         chromopt='--chrom \'*\' ' if 'sparse' in cls.__doc__.lower() else ''
         epilog=f'''\
         Examples --> can be directly copy-pasted (:
-         prst downloadutil --pattern example --destdir ./; cd example  {insert}                                        # Makes \'example\' dir in current path.
+         prst downloadutil --pattern example --destdir ./; cd example  {insert}                                       # Makes \'example\' dir in current path.
          prstools {cmdname} --ref {ldrefname} --target target --sst sumstats.tsv {chromopt}--n_gwas 2565 --out ./result-{cmdname} # Run the model with example data.
-         prst {cmdname} -r {ldrefname} -t target -s sumstats.tsv -n 2565 {chromopt}-o ./result-{cmdname} --pred                  # A shorter version of previous that also does the predictions.
+         prst {cmdname} -r {ldrefname} -t target -s sumstats.tsv -n 2565 {chromopt}-o ./result-{cmdname}                          # A shorter version of previous.
         '''
+        # prst {cmdname} -r {ldrefname} -t target -s sumstats.tsv -n 2565 {chromopt}-o ./result-{cmdname} --pred # A shorter version of previous that also does the predictions.
         #plink --bfile target --out prspred --keep-allele-order --score ./result-{cmdname}_* 2 4 6 # Make predictions from weights (plink must be installed).
         newepi = []
         for elem in epilog.split('\n'):
@@ -149,16 +150,16 @@ class BasePred(ABC):
     
     @classmethod
     def from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
-                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, pred=False, command=None, **kwargs):
+                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, pred='yes', command=None, **kwargs):
         from prstools.loaders import RefLinkageData
-        
+
         # Initialize model object(s) (multiple since hyperparam ranges, and maybe chroms):
         def testkey(key): return (key in pkwargs) if pkwargs else True # The verbose in the next line overwrites the verbose in the 'kwargs' dict
         groupby = kwargs.get('groupby', pkwargs.get('groupby',{}).get('kwargs',{}).get('default', groupbydefault))
         model = cls.from_params(**dict({key: item for key, item in kwargs.items() if testkey(key)}, verbose=verbose, groupby=groupby))
         
-#         # Loop through different models, likely a parameter grid:
-#         for model in models: # not sure about this atm
+        ## Loop through different models, likely a parameter grid:
+        #for model in models: # not sure about this atm
         
         # Gen output file name format and do quick check if output file can be saved before a lot of work is done:
         if out: out_fnfmt = model.create_output_fnfmt(**locals())
@@ -173,12 +174,13 @@ class BasePred(ABC):
         prstlogs = prst.utils.get_prstlogs()
         tic, toc = prstlogs.get_tictoc()
         
-        if pred: # Prediction
+        if pred != 'no': # Prediction
             #import IPython as ip; ip.embed() # save these lines for later..
             #model.remove_linkdata(); linkdata.clear_linkage_allregions # seems to do pretty much nothing.. anyway xp was 5% mem, which jumped to 20 and 60 later
             bed = prst.loaders.load_bed(target, verbose=verbose)
             yhat = model.predict(bed); 
             prst.loaders.save_prs(yhat, fn=out_fnfmt, verbose=verbose) # Store prediction result
+
         if return_models: 
             return model
     

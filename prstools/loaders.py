@@ -1397,7 +1397,8 @@ if True:
                   f" For instance --colmap {example_colmap}. Mind that not all positions need to have a "
                   "column name and can be left empty. With this example colmap we will get the following column mapping:")
             prst.loaders.get_conv_dt(flow='in', colmap=example_colmap, verbose=True)
-            print('Also, if the conversion column name is not present in the input file it will just be skipped.')
+            print('Also, if the conversion column name is not present in the input file it will just be skipped.'
+                  ' Note that SNP should mainly contain rsids as SNP id\'s, since that is what the references use.')
             #print(f'This results in the following colmapping dictionary {colnameconv_dt}, which was already applied to the following dataframe.')
             cprint_input_df(overview_df,head=head); print('\n')
             #cprint_input_df(sst_df)
