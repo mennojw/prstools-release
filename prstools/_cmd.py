@@ -178,7 +178,7 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                         help="Output prefix for the results (variant weights). This should be a combination of the desired output dir and file prefix.")))
             data_group.add_argument("--n_gwas","-n",
                     **prc(dict(required=False, type=int, metavar='<num>', default=None,
-                        help="Sample size of the GWAS. Not required if sumstat has a 'N' column.")))
+                        help="Sample size of the GWAS. Not required if sumstat has a 'N' column and overrules column data if specified.")))
             data_group.add_argument("--chrom", #lambda x: x.split(',')
                     **prc(dict(required=False,type=str, metavar='<chroms>', default='all', 
                         help="Optional: Select specific chromosome to work with. You can specify a specific chromosome as e.g. \"--chrom 3\". All chromosomes are used by default.")))

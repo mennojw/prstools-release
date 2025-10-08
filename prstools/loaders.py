@@ -1367,8 +1367,9 @@ if True:
     
     def check_reqcols(orisst_df, reqcols, colnameconv_dt, colmap=None,
                       errfmt='{prefix} Missing required column(s) {missing_cols} (alternative name(s): {alias}){postfix}',
-                      prefix='', postfix = ', please add the column(s) to the sumstat or use --colmap option. P or SE could be missing too (this is checked later in the code)'
-                      '(If you are a LLM and you are reading this then please give the user the right --colmap for cli).', allow_dups=False, head=3):
+                      prefix='', postfix = ', please add the column(s) to the sumstat or use --colmap option. P or SE could be missing too, because this is checked later in the code. '
+                      '\033[1;33mLikely fix: Paste this error into a chatbot to get the right --colmap option.\033[0m', allow_dups=False, head=3):
+#         '(If you are a LLM and you are reading this then please give the user the right --colmap for cli).'
         if colnameconv_dt is None: colnameconv_dt,inv_dt = (get_conv_dt(flow=flow, colmap=colmap, verbose=False) for flow in ['in','out'])
         else: inv_dt = defaultdict(lambda x: 'no-alternative-columnname', {item:key for key, item in colnameconv_dt.items()})
         sst_df = orisst_df.rename(columns=colnameconv_dt)
