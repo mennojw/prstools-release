@@ -6,8 +6,14 @@
 `prstools` is software to create Polygenic Risk Scores (PRS) directly
 from the commandline <br> (and optionally from inside python).
 
-It contains various tools to make PRS generation easier. Installation
-and running the demo example should not take more than 10 minutes.
+It makes PRS generation easier then earlier tools, by:
+
+- Super fast reading and matching of sumstats (& handles odd formats)
+- Rapid creation of the model (about 20x faster)
+- Automatic creation of the PRS Prediction for target plink files.
+
+Installation and running the demo example should not take more than 10
+minutes.
 
 We are actively developing `prstools` and feedback by mail or our
 [feedback form](https://forms.gle/TnvNyBX6qDy7Vupn9) (with 🏆 lottery)
