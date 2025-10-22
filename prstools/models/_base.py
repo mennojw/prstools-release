@@ -687,7 +687,7 @@ class GroupByModel(MultiPred, BasePred):
             for grp, cur_linkdata in contents.items())
         if self.pbar: 
             real_pbar.close(); real_pbar=None
-            prst.utils.clear_memory(); # Crucial line because gc.collect() inside, else thing go wrong later.
+            prst.utils.clear_memory(); # Crucial line because gc.collect() inside, else things go wrong later.
             fakebar.close(); mgr.shutdown(); mgr=None
         for grp, model in results: self.model_dt[grp] = model
         self.combine_set_weights()
@@ -860,29 +860,6 @@ class PRSCS2(BasePred):
                                 np.sqrt(sigma/n_eff)*np.random.randn(len(D), 1))
                     beta[idx_reg] = linalg.solve_triangular(dinvt_chol, beta_tmp, trans='N')
                     quad += np.dot(np.dot(beta[idx_reg].T, dinvt), beta[idx_reg])              
-                elif self.sampler == 'bhat':
-                    D     = linkdata.get_linkage_region(i=i_reg)
-                    Dh    = linkdata.get_specified_data_region(i=i_reg, varname='Dhalf') 
-                    T     = np.diag(psi[idx_reg].T[0])*s2/n_eff
-                    u     = np.random.randn(len(D),1)*np.sqrt(T.diagonal()[:,np.newaxis])
-                    seedk = np.random.randn(len(D),1)
-                    beta_tilde_samp = beta_tilde/s2 - D@u/s2 - (Dh@seedk)/(s*np.sqrt(n_eff)) #(D@Dih@seedk)
-                    Q = D@T/s2 + np.eye(len(D))/n_eff
-                    beta[idx_reg] = u + T@linalg.solve(Q, beta_tilde_samp)
-                    quad += np.dot(np.dot(beta[idx_reg].T, D+np.diag(1.0/psi[idx_reg].T[0])), beta[idx_reg])
-                elif self.sampler == 'sld':
-                    D      = linkdata.get_linkage_region(i=i_reg) # This is not ok, mod later.
-                    Di     = linkdata.get_precision_region(i=i_reg) #auto_linkage_region(i=i_reg)
-                    Dih    = linkdata.get_specified_data_region(i=i_reg, varname='Dihalf') 
-                    #if not np.any(beta_ml[idx_reg]): beta_ml[idx_reg] = Di@beta_tilde
-                    T     = np.diag(psi[idx_reg].T[0])*s2/n_eff
-                    u     = np.random.randn(len(Di),1)*np.sqrt(T.diagonal()[:,np.newaxis])
-                    seedk = np.random.randn(len(Di),1)
-                    k     = Dih@seedk
-                    alpha = Di@beta_tilde-u-(s/np.sqrt(n_eff))*k
-                    W     = (T + (s2/n_eff)*Di)
-                    beta[idx_reg] = u + T@linalg.solve(W, alpha)
-                    quad += np.dot(np.dot(beta[idx_reg].T, D+np.diag(1.0/psi[idx_reg].T[0])), beta[idx_reg])
                 else:
                     raise Exception('Sampler not recognized:', self.sampler)
                 

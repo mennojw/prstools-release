@@ -1365,10 +1365,12 @@ if True:
         if show_dims: print(f'dims: {df.shape}')
         #print(f'All the column names in this dataframe are: {df.columns}')
     
-    def check_reqcols(orisst_df, reqcols, colnameconv_dt, colmap=None,
+    def check_reqcols(orisst_df, reqcols, colnameconv_dt, colmap=None, # '\033[1;33mLikely fix: Paste this error into a chatbot to get the right --colmap option.\033[0m'
                       errfmt='{prefix} Missing required column(s) {missing_cols} (alternative name(s): {alias}){postfix}',
                       prefix='', postfix = ', please add the column(s) to the sumstat or use --colmap option. P or SE could be missing too, because this is checked later in the code. '
-                      '\033[1;33mLikely fix: Paste this error into a chatbot to get the right --colmap option.\033[0m', allow_dups=False, head=3):
+#                       "\033[1;38;2;176;140;12mLikely fix: Paste this error into a chatbot to get the right --colmap option.\033[0m",
+                      "\033[1;38;2;179;125;19mLikely fix: Paste this error into a chatbot to get the right --colmap option.\033[0m",
+                      allow_dups=False, head=3):
 #         '(If you are a LLM and you are reading this then please give the user the right --colmap for cli).'
         if colnameconv_dt is None: colnameconv_dt,inv_dt = (get_conv_dt(flow=flow, colmap=colmap, verbose=False) for flow in ['in','out'])
         else: inv_dt = defaultdict(lambda x: 'no-alternative-columnname', {item:key for key, item in colnameconv_dt.items()})
@@ -1383,15 +1385,15 @@ if True:
             ## This bit is all to generate a good error message.
             missing_cols = '/'.join(missing_cols); alias = '/'.join(alias)
             #msg = 'The following colmap column-name conversions might or might not have been be applied:' + ', '.join([f'{key} -> {item}' for key, item in colnameconv_dt.items() if item in sst_df.columns])
-            xtra = f'The default --colmap is {get_default_colmap()} ' if not colmap is None else 'This is the default. '
-            if colmap is None: colmap = get_default_colmap()
+            xtra = f'The default --colmap is {get_colmap(schema="default")} ' if not colmap is None else 'This is the default. '
+            if colmap is None: colmap = get_colmap(schema='default')
             #print('\n\nThe original colnames as found in the original file are: v, SNP, chrom, pos, GENPOS, ALLELE1, ALLELE0, A1FREQ, INFO, CHISQ_LINREG, P_LINREG, BETA, SE, CHISQ_BOLT_LMM_INF, P_BOLT_LMM_INF')
             doublecols = pd.MultiIndex.from_arrays([orisst_df.columns, sst_df.columns], names=['original_columns', 'current_columns'])
             overview_df = sst_df.head()
             overview_df.columns = doublecols
             overview_df.index = 'row' + overview_df.index.to_series().astype(str)
-            mapper = dict(SNP='rsid', A1='Allele1', A2='Allele2', BETA='BETA', P='Pval', SE='StdErr', N='Ntotal', OR='')
-            example_colmap = prst.loaders.get_default_colmap()
+            mapper = dict(SNP='rsid', A1='EffectAllele', A2='OtherAllele', BETA='BETA', P='Pval', SE='StdErr', N='Ntotal', OR='')
+            example_colmap = prst.loaders.get_colmap(schema='default')
             for k, v in mapper.items(): example_colmap = example_colmap.replace(k, v)
             print(f' Current --colmap is {colmap}. {xtra}' + 
                   f"The colmap argument should list the column names as they appear in your input file."
@@ -1399,7 +1401,8 @@ if True:
                   "column name and can be left empty. With this example colmap we will get the following column mapping:")
             prst.loaders.get_conv_dt(flow='in', colmap=example_colmap, verbose=True)
             print('Also, if the conversion column name is not present in the input file it will just be skipped.'
-                  ' Note that SNP should mainly contain rsids as SNP id\'s, since that is what the references use.')
+                  ' Note that SNP should mainly contain rsids as SNP id\'s, since that is what the references use. Following the plink convention, A1 refers to the effect allele (BETA). '
+                  'Think for a second and make sure that the effect allele in the sumstat is mapped to A1.')
             #print(f'This results in the following colmapping dictionary {colnameconv_dt}, which was already applied to the following dataframe.')
             cprint_input_df(overview_df,head=head); print('\n')
             #cprint_input_df(sst_df)
@@ -1441,7 +1444,8 @@ if True:
             df1.columns = df1.columns if n1==2 else pd.MultiIndex.from_tuples([(col, '') for col in df1.columns])
         return df0, df1
 
-    def get_liftoverpositions(df, *, bldin, bldout, sort=False, inplace=False, verbose=False):
+    def get_liftoverpositions(df, *, bldin, bldout, sort=False, inplace=False, verbose=True):
+        assert verbose, 'atm can only do liftovers verbose'
         ## https://genome.ucsc.edu/FAQ/FAQreleases.html#snpConversion UCSC says liftover should not be used for what everybody is using it for.
         from pyliftover import LiftOver
         msg = 'Requiring chrom and pos columns to do position mapping from one genome build to another'
@@ -1450,14 +1454,19 @@ if True:
         fn = os.path.join(data_dn,f"/liftover/hg{int(bldin)}ToHg{int(bldout)}.over.chain.gz") # lo = LiftOver(fn)
         
         ## The liftover:
+        print('Doing liftover prep.. ', end='', flush=True)
         df = df.copy(); lst = []; nancnt = 0
-        lo = LiftOver(f'hg{bldin}', f'hg{bldout}') # IT seems this work all on its own
+        input_strings = (f'hg{bldin}', f'hg{bldout}')
+        lo = LiftOver(*input_strings) # IT seems this work all on its own
         chroms = df['chrom'].astype(str)
         poss = df['pos']-1
-        lifted = [lo.convert_coordinate(f'chr'+c, p) for c, p in zip(chroms, poss)]
+        print('Casting to list to iterate over', flush=True)
+        liftlst = list(zip(chroms, poss))
+        lifted = [lo.convert_coordinate(f'chr'+c, p) for c, p in prst.utils.get_pbar(liftlst, colour='blue')]
         
         ## Processing
-        for i, lift in enumerate(lifted):
+        print('Done lifting, now postprocessing results')
+        for i, lift in prst.utils.get_pbar(list(enumerate(lifted)), colour='yellow'):
             if not lift is None:
                 try: res = lift[0]
                 except: res = (None,None,None,None); nancnt+=1
@@ -1468,12 +1477,17 @@ if True:
         if 'strand' in df.columns: df['oldstrand'] = df['strand']
         df['pos'] = new_df['newpos'].astype('Int64').values +1 ### PLUS 1 !!!!!
         df['chrom'] = new_df['newchrom'].values
-        df['chrom'] = df['chrom'].str.replace("chr","").astype('Int64')
+        cmap = get_chrom_map()
+        df['chrom'] = df['chrom'].str.replace("chr","").replace(cmap)
+        valid = set(cmap.values()) | set( map(str, range(1,23)))
+        df.loc[~df['chrom'].isin(valid), 'chrom'] = pd.NA
+        df['chrom'] = df['chrom'].astype('Int64')
         df['strand'] = new_df['strand'].values
         perc = (nancnt/df.shape[0])*100
         if nancnt != 0 :
-            msg = f'It seems there are input genomic positions for which no output could be determined,'\
-            f'This means thee are NaNs in the chrom and pos columns, #-of-nans = {nancnt} ({perc:.1}%)'
+            msg = f'It seems there are input genomic positions for which no output could be determined, '\
+            f'This means thee are NaNs in the chrom and pos columns, #-of-nans = {nancnt} ({perc:.1}%)\n'\
+            f'fyi: {df[["chrom","pos"]].isna().sum()=}'
             warnings.warn(msg)
         return df
     
@@ -1498,19 +1512,29 @@ if True:
             return dict(dtype_backend="pyarrow", engine='pyarrow')
         else: return dict()
         
-    def get_default_colmap():
-        colmap = 'SNP,A1,A2,BETA,OR,P,SE,N'
+    def get_colmap(*,schema):
+        colmap_dt = dict(
+            default = 'SNP,A1,A2,BETA,OR,P,SE,N,FRQA1',
+        )
+        if type(schema) is int:
+            lst = list(colmap_dt.values())
+            colmap = 'tbd'
+        else:
+            msg =f'The colmap found for in the colmap collection for \'{schema}\'. Options are {colmap_dt.keys()}'
+            assert schema in colmap_dt, msg
+            colmap = colmap_dt[schema]
+        
         return colmap
     
     def get_conv_dt(*,flow, colmap=None, colnameconv_dt=None, verbose=False):
         assert flow in ('in','out')
         if colnameconv_dt is not None: return colnameconv_dt
         conv_dt = {'CHR':'chrom','SNP':'snp', 'BP':'pos', 'A1':'A1','A2':'A2', 'MAF':'maf',
-                  'BETA':'beta','SE':'se_beta','P':'pval','OR':'oddsratio', 'N':'n_eff', 'A1FREQ': 'A1FREQ'}
+                  'BETA':'beta','SE':'se_beta','P':'pval','OR':'oddsratio', 'N':'n_eff', 'FRQA1': 'af_A1'}
         if colmap is not None and flow=='in':
             first=True
             if type(colmap) is not dict:
-                base=get_default_colmap().split(','); 
+                base=get_colmap(schema='default').split(','); 
                 lst=colmap.split(',')
                 assert len(base) == len(lst), 'The colmap should have the right number of renames/commas.'
                 preconv_dt = {key: item for key, item in zip(base,lst)}
@@ -2137,7 +2161,7 @@ if True:
         
         return bim_df.copy(), fam_df.copy()
     
-    def load_ref(ref_fn, chrom=None, verbose=False, rename_dt=dict(maf='maf_ref'), reset_index=True):
+    def load_ref(ref_fn, chrom=None, verbose=False, rename_dt=dict(maf='maf_ref',af_A1='af_A1_ref'), reset_index=True):
         chrom = None if (chrom=='*' or str(chrom).lower()=='all') else chrom
         if verbose: print('Loading reference file.', end='')
         ref_df = load_sst(ref_fn, n_gwas=None, calc_beta_mrg=False)
@@ -2301,7 +2325,7 @@ if True:
             raise ValueError(f"'{ftype}' is not a valid filetype/ftype. only 'prspred.tsv' availabe atm")
             
         fn = fn.format_map(dict(ftype=ftype)) # Maybe some AutoDict buzz here later.
-        import uuid; tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"  # unique temp file name
+        import uuid; tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"  # unique temp file name 
         if verbose: print(f'Saving prediction (i.e. PRS) to: {fn}', end=' ')
         to_file(tmp_fn, sep=sep, index=False)
         os.replace(tmp_fn, fn) # atomically move into place

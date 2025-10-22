@@ -115,9 +115,9 @@ illustrate usage, which should work with a simple copy-paste. <br> <br>
 For more information and a hands on demonstration of what `prstools` can
 do have a look at the [Getting Started
 Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
-There is also a video version of this tutorial which you can access here
-\[Video is not available yet but will come soon\]. You can load that
-same tutorial in a free cloud instance by clicking here: [![Google
+There is also a [video version of this
+tutorial](https://youtu.be/BP1zUBFH2l8). You can load the tutorial in a
+free cloud instance by clicking here: [![Google
 Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 
 ## Contact

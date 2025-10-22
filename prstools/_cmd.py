@@ -187,7 +187,8 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                         help="Optional: Allows one to specify an alterative column name for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff (in that order). "
                                     "Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,\" (OR & N are excluded in this example). "
                                     "When the command is run a quick this_column -> that_column conversion table will be shown. "
-                                    "Additionaly prstools has many internal checks to make sure a good PRS will be generated! By default this is the PRS-CS standard. (default: SNP,A1,A2,BETA,OR,P,SE,N)")
+                                    "Additionaly prstools has many internal checks to make sure a good PRS will be generated! The default colmap works with "
+                                    "the PRS-CS standard sumstat formatting. (default: SNP,A1,A2,BETA,OR,P,SE,N)")
             data_group.add_argument("--pred", "-p", **prc(dict(required=False,metavar='<yes/no>',type=str, default='yes',
                                     help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset (yes/no).")))
 
