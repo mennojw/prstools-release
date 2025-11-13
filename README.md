@@ -8,8 +8,8 @@ from the commandline <br> (and optionally from inside python).
 
 It makes PRS generation easier, compared to previous tools, by:
 
-- Super fast reading and matching of sumstats (handles odd formats)
-- Rapid creation of the model (about 20x faster than earlier PRS-CS)
+- Super fast reading and matching of sumstats (handles odd formats).
+- Rapid creation of the model.
 - Automatic generation of the PRS Prediction for target plink files.
 
 All the above, for a real GWAS sumstat, within 30 minutes using only
