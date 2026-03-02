@@ -12,11 +12,12 @@ from prstools.models._compute import dpsi, gigrnd, g
 # __all__ = [
 #     name for name, val in globals().items()
 #     if not name.startswith('_')
-#     and callable(val)
+#     and callable(val) 
 #     and getattr(val, '__module__', None) == __name__
 # ]
 
-__all__ = ['BasePred','MultiPred','GroupByModel','PredPRS','PRSCS2']
+__all__ = ['BasePred','BaseMulti','GroupByModel','MultiPRS','PRSCS2']
+# __all__ = ['BasePred','MultiPred','GroupByModel','PredPRS','PRSCS2']
 
 
 class BasePred(ABC):
@@ -26,12 +27,14 @@ class BasePred(ABC):
     default_weight_cols = ['chrom','snp','pos','A1','A2','allele_weight']
     extra_weight_cols   = False
     default_sst_cols = ['SNP','A1','A2','BETA']
+    dtype_pred = 'float32'
     _nancheck = True
     scaling = 'ref'
     shuffle = False
     _clear_cache=True
     _close_pbar = True
     _default_n_jobs=4
+    algo_pred = 'i8fast'
     
     def remove_cache(self):
         if hasattr(self,'cache_dt'):
@@ -87,7 +90,78 @@ class BasePred(ABC):
     @classmethod
     def _get_cli_spkwg(cls, basic_pkwargs='figurethisout'):
         
-        placeholdersection = thisstuffisnotactiveyet
+        
+        @classmethod
+        def from_testing(cls,
+                destdir:str=None, # Directory in which all the data will be downloaded. Option required if you want the download to start. w00t w00t leet
+                pattern:str='ALL',# A string pattern that retrieves every file that it matches. Matches everything by default. Without --destdir option (required to start downloading) one can see which files get matched.
+                ):
+            return 'magic'
+
+        @classmethod
+        def _get_cli_spkwg(cls, moar=12):
+            from textwrap import dedent
+            from prstools.utils import retrieve_pkwargs
+            basic_pkwargs = dict(basics=dict(
+                args=['-h', '--help'], 
+                kwargs=dict(action='help', help='Show this help message and exit.')))
+            spkwg = cls ### QUIKC HACK
+            doc = dedent(cls.__doc__)
+            new_spkwg = dict(
+                cmdname    = spkwg.__name__.lower(), #command name
+                clsname    = spkwg.__name__, #class name
+                description= doc,
+                help       = doc.split('\n')[0],
+                epilog     = spkwg._get_cli_epilog(),
+                modulename = spkwg.__module__,
+                groups     = dict(
+                    generaloptions=dict(
+                        grpheader='General Options',
+                        pkwargs=basic_pkwargs),
+                    dataoptions=dict(
+                        grpheader='Data Options',
+    #                     pkwargs={**retrieve_pkwargs(cls.from_cli_params_and_run)}),
+                        pkwargs={**retrieve_pkwargs(cls.from_testing)}),
+                    modeloptions=dict(
+                        grpheader='Model Options',
+                        pkwargs=retrieve_pkwargs(spkwg))),
+    #             subtype    = 'BasePred'
+                subtype    = 'PRSTCLI'
+            )
+
+
+            return new_spkwg
+        
+        
+        from textwrap import dedent
+        from prstools.utils import retrieve_pkwargs
+        basic_pkwargs = dict(basics=dict(
+            args=['-h', '--help'], 
+            kwargs=dict(action='help', help='Show this help message and exit.')))
+        spkwg = cls ### QUIKC HACK
+        doc = dedent(cls.__doc__)
+        new_spkwg = dict(
+            cmdname    = spkwg.__name__.lower(), #command name
+            clsname    = spkwg.__name__, #class name
+            description= doc,
+            help       = doc.split('\n')[0],
+            epilog     = spkwg._get_cli_epilog(),
+            modulename = spkwg.__module__,
+            groups     = dict(
+                generaloptions=dict(
+                    grpheader='General Options',
+                    pkwargs=basic_pkwargs),
+                dataoptions=dict(
+                    grpheader='Data Options',
+#                     pkwargs={**retrieve_pkwargs(cls.from_cli_params_and_run)}),
+                    pkwargs={**retrieve_pkwargs(cls.from_testing)}),
+                modeloptions=dict(
+                    grpheader='Model Options',
+                    pkwargs=retrieve_pkwargs(spkwg))),
+            subtype    = 'PRSTCLI'
+        )
+        
+        
         if basic_pkwargs and type(basic_pkwargs) is bool:
             basic_pkwargs = dict(basics=dict(
                     args=['-h', '--help'], 
@@ -110,30 +184,70 @@ class BasePred(ABC):
             subtype    = 'PRSTCLI'
         )
         
-        ##### THIS STUFF IS ACTUALLY NOT BEING USED, BUT THIS IS HOW IT SHOULD BE USED.
-        verifythisisnotused
-        
+
+        modelgeneral_group = model_parser.add_argument_group('General Options')
+        modelgeneral_group.add_argument('-h', '--help', action='help', help='Show this help message and exit.') #default=argparse.SUPPRESS
+        modelgeneral_group.add_argument('--cpus', '-c', **prc(dict(metavar='<number-of-cpus>', default=get_default_cpus(), type=int, 
+                    help='The number of CPUs to use (1–5 is generally most efficient). Set to -1 to disable.')))
+
         # Add data related kwargs:
         data_group = model_parser.add_argument_group('Data Arguments (first 5 required)')
-        data_group.add_argument("--ref","--ref_dir","-r", 
+        data_group.add_argument("--ref","-r", 
                 **prc(dict(required=True, metavar='<dir/refcode>', 
                     help="Path to the directory that contains the LD reference panel. You can download this reference data "
-                           f"manually with \'{basecmd} downloadref\'. Soon it will be possible to automatically download it on the fly.")))
-        data_group.add_argument("--target", "--bim_prefix", "-t", 
-                **prc(dict(required=True, metavar='<bim-prefix>', 
-                    help="Specify the directory and prefix of the bim file for the target dataset.")))
-        data_group.add_argument("--sst","--sst_file","-s", **prc(dict(required=True, metavar='<file>', 
-                    help="The summary statistics file from which the model will be created. The file should contain columns SNP, A1, A2, P and BETA or OR (in this order)."
-                         f" SNP should contain rsid\'s. See {format_color('https://tinyurl.com/sstxampl','34')} for an example.")))
-        data_group.add_argument("--n_gwas","-n", 
-                **prc(dict(required=True, type=int, metavar='<num>', 
-                    help="Sample size of the GWAS")))
-        data_group.add_argument("--out","--out_dir","-o", 
-                **prc(dict(required=True, metavar='<dir>', 
-                    help="Output prefix for the results (variant weights). This should be a combination of the desired output dir and file prefix.")))
-        data_group.add_argument("--chrom", 
-                    type=lambda x: x.split(','), metavar='<chroms>', default=range(1, 23), 
-                    help="Optional: Chromosomes to include. You can specify multiple by using a separting comma e.g. \"--chrom 1,2,3\".")
+                           "manually too with \'{basecmd} downloadutil\'. "
+                           "Current config relevant to this functionality (prstdatadir: {prstdatadir}, auto_download: {auto_download}).")))
+        data_group.add_argument("--target", "-t", 
+                **prc(dict(required=True, metavar='<bim-prefix>',
+                    help="Specify the bim file or its prefix of desired target dataset. The bim file should be in plink format.")))
+        data_group.add_argument("--sst","-s", **prc(dict(required=True, metavar='<file>', 
+        help="The summary statistics file from which the model will be created. The file should contain columns: SNP, A1, A2, BETA or OR, P or SE information. "
+              "At the moment, the file is assumed to be tab-seperated, if you like other formats please let devs know. "
+             f"Alternative column names can be specified with --colmap (more info below). SNP column should contain rsid\'s. "
+             f"See {format_color('https://tinyurl.com/sstxampl','34')} for an example.")))
+        data_group.add_argument("--out","-o", 
+                **prc(dict(required=True, metavar='<dir+prefix>', 
+                    help="Output prefix for the results (variant weights). This should be a combination of the desired output dir + file prefix.")))
+        data_group.add_argument("--n_gwas","-n",
+                **prc(dict(required=False, type=int, metavar='<num>', default=None,
+                    help="Sample size of the GWAS. Not required if sumstat has a 'N' column and overrules column data if specified.")))
+        data_group.add_argument("--chrom", #lambda x: x.split(',')
+                **prc(dict(required=False,type=str, metavar='<chroms>', default='all', 
+                    help="Optional: Select specific chromosome to work with. You can specify a specific chromosome as e.g. \"--chrom 3\". All chromosomes are used by default.")))
+        data_group.add_argument("--colmap", #lambda x: x.split(',')
+                **prc(dict(type=str, metavar='<colnames>', default='{defaultcolmap}',# Allows one to specify an alterative column name for columns SNP,A1,A2,BETA,OR,P,SE,N (in that order). "
+                    help="Optional: Allows one to specify an alterative column name for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1 (in that order). "
+                                "Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,\" (OR, N & FRQA1 are excluded in this example). "
+                                "When the command is run a quick this_column -> that_column conversion table will be shown. "
+                                "Additionaly prstools has many internal checks to make sure a good PRS will be generated! The original default colmap works with "
+                                "the PRS-CS standard sumstat formatting.")))
+        data_group.add_argument("--pred", "-p", 
+                **prc(dict(required=False,metavar='<yes/no>',type=str, default='yes',
+                                help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset (yes/no).")))
+
+        
+        
+#         # Add data related kwargs:
+#         data_group = model_parser.add_argument_group('Data Arguments (first 5 required)')
+#         data_group.add_argument("--ref","--ref_dir","-r", 
+#                 **prc(dict(required=True, metavar='<dir/refcode>', 
+#                     help="Path to the directory that contains the LD reference panel. You can download this reference data "
+#                            f"manually with \'{basecmd} downloadref\'. Soon it will be possible to automatically download it on the fly.")))
+#         data_group.add_argument("--target", "--bim_prefix", "-t", 
+#                 **prc(dict(required=True, metavar='<bim-prefix>', 
+#                     help="Specify the directory and prefix of the bim file for the target dataset.")))
+#         data_group.add_argument("--sst","--sst_file","-s", **prc(dict(required=True, metavar='<file>', 
+#                     help="The summary statistics file from which the model will be created. The file should contain columns SNP, A1, A2, P and BETA or OR (in this order)."
+#                          f" SNP should contain rsid\'s. See {format_color('https://tinyurl.com/sstxampl','34')} for an example.")))
+#         data_group.add_argument("--n_gwas","-n", 
+#                 **prc(dict(required=True, type=int, metavar='<num>', 
+#                     help="Sample size of the GWAS")))
+#         data_group.add_argument("--out","--out_dir","-o", 
+#                 **prc(dict(required=True, metavar='<dir>', 
+#                     help="Output prefix for the results (variant weights). This should be a combination of the desired output dir and file prefix.")))
+#         data_group.add_argument("--chrom", 
+#                     type=lambda x: x.split(','), metavar='<chroms>', default=range(1, 23), 
+#                     help="Optional: Chromosomes to include. You can specify multiple by using a separting comma e.g. \"--chrom 1,2,3\".")
 
         return spkwg
     
@@ -148,12 +262,23 @@ class BasePred(ABC):
             model = cls(**kwg, groupby=groupby)
         return model
     
+    @staticmethod
+    def _get_pkwargs_for_class(cls): # fyi, making a classmethod here, gave issue since. 
+        # it would get BasePred as class, did not find other fix
+        # pkwargs are the kwargs and the defaults of the prstools cli.
+        from prstools._parser_vars import get_subparserkwg_lst
+        for elem in get_subparserkwg_lst():
+            if elem['clsname'] == cls.__name__:
+                pkwargs = elem['pkwargs']; break
+        return pkwargs
+    
     @classmethod
     def from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
-                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, pred='yes', command=None, **kwargs):
-        from prstools.loaders import RefLinkageData
-
+                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, pred='auto', command=None, **kwargs):
+        from prstools.linkage import RefLinkageData
+        
         # Initialize model object(s) (multiple since hyperparam ranges, and maybe chroms):
+        if pkwargs is None: pkwargs = cls._get_pkwargs_for_class(cls)
         def testkey(key): return (key in pkwargs) if pkwargs else True # The verbose in the next line overwrites the verbose in the 'kwargs' dict
         groupby = kwargs.get('groupby', pkwargs.get('groupby',{}).get('kwargs',{}).get('default', groupbydefault))
         model = cls.from_params(**dict({key: item for key, item in kwargs.items() if testkey(key)}, verbose=verbose, groupby=groupby))
@@ -169,17 +294,20 @@ class BasePred(ABC):
                         n_gwas=n_gwas, chrom=chrom, colmap=colmap, pop=pop, verbose=verbose)
         model.set_linkdata(linkdata)
         if fit: model.fit()
-        if out:  model.save_weights(out_fnfmt, ftype=ftype) # Store fitting result
-            
-        prstlogs = prst.utils.get_prstlogs()
-        tic, toc = prstlogs.get_tictoc()
+        if out: model.save_weights(out_fnfmt, ftype=ftype) # Store fitting result
         
-        if pred != 'no': # Prediction
-            #import IPython as ip; ip.embed() # save these lines for later..
+        if pred == 'auto' and not hasattr(model, 'weights_df'): pred = 'no'
+        if pred and pred != 'no': # Prediction
             #model.remove_linkdata(); linkdata.clear_linkage_allregions # seems to do pretty much nothing.. anyway xp was 5% mem, which jumped to 20 and 60 later
-            bed = prst.loaders.load_bed(target, verbose=verbose)
-            yhat = model.predict(bed); 
-            prst.loaders.save_prs(yhat, fn=out_fnfmt, verbose=verbose) # Store prediction result
+            try: 
+                bed = prst.io.load_bed(target, verbose=verbose)
+                yhat = model.predict(bed); 
+                prst.io.save_prs(yhat, fn=out_fnfmt, verbose=verbose) # Store prediction result
+            except Exception as e:
+                msg = (f"Could not generate prediction (e.g. plink file missing)"
+                       f" so since --pred='auto' the prediction step will be skipped (target={target})")
+                if pred == 'auto': print(msg)
+                else: raise e
 
         if return_models: 
             return model
@@ -260,7 +388,7 @@ class BasePred(ABC):
         kwg = {}
         if addicols is not None: kwg['addicols'] = addicols
         if basecols is not None: kwg['basecols'] = basecols
-        out_df = prst.loaders.save_sst(sst_df=self.sst_df, fn=fn, return_sst=return_sst, ftype='tsv', 
+        out_df = prst.io.save_sst(sst_df=self.sst_df, fn=fn, return_sst=return_sst, ftype='tsv', 
                     nancheck=nancheck, verbose=self.verbose, **kwg)
         if return_sst: return out_df
     
@@ -373,28 +501,39 @@ class BasePred(ABC):
         sst_lst += [chunk_sst_df]
         return stuff
     
-    def predict(self, bed, *, n_inchunk=1000, groupby=None, validate=True,
+    def predict(self, bed, *, n_inchunk=1000, groupby=None, validate=True, dtype=None, algo=None,
                 localdump=False, weight_type='allele', trait_df=None, colour='#7f00ff'): # <-- The more esotheric stuff on this line
         
         if 'pysnptools' in str(type(bed)):
             srd = bed; del bed
             return self.srdpredict(**locals())
+        if type(bed) is str:
+            if self.verbose: print('Input to predict() is a string and perhaps a filepath. Trying to load..')
+            bed = prst.io.load_bed(bed,verbose=self.verbose)
         
         prstlogs = prst.utils.get_prstlogs()
         tic, toc = prstlogs.get_tictoc()
         if self.verbose: print(f'Predicting phenotypes i.e. generating PRS (in chucks of {n_inchunk} snps).', flush=True)
-        assert weight_type in ('allele','standardized'); 
+        assert weight_type in ('allele','standardized');
+        if algo != 'ori': assert weight_type == 'allele'
         if trait_df is not None: assert localdump
         weights_df = self.get_weights()
+        dtype = self.dtype_pred if dtype is None else dtype
+        algo  = self.algo_pred if algo is None else algo
+        msg = 'Using novel i8fast procedure for prediction!'
+        if algo == 'i8fast': warnings.warn(msg)
         
         if validate:
             bim_df = bed.bim_df.copy() # For the next line did it the other way around for mem-footprint.
-            weights_df = prst.loaders.merge_snps(weights_df, bim_df, req_all_right=False, handle_missing='filter', flipcols=[])
+            weights_df = weights_df.drop(columns='xidx', errors='ignore') # Make sure it does not have xidx by chance.
+            weights_df = prst.merge_snps(weights_df, bim_df, req_all_right=False, handle_missing='filter', flipcols=[]) ## HEY WAIT... WHAT!!!
             weights_df['allele_weight']=weights_df['allele_weight']*weights_df['rflip'] # This is a bit of a hack
+            weights_df['xidx'] = weights_df['xidx'].astype('int64', errors='ignore')
+            assert weights_df['xidx'].dtype == 'int64', 'xidx contained a nan, this should not happen for regular users, contact dev'
             weights_df = weights_df.sort_values('xidx')
         
         # Loop through Genome:
-        yhat_dt = dict(); sst_dt = {}
+        yhat_dt = dict(); sst_dt = {}; X=None
         if len(weights_df['allele_weight'].shape) == 1: n_traits = 1
         else: n_traits = weights_df['allele_weight'].shape[1]
         #for itr in self.get_iterator(range(n_iter), pbar=self.pbar)
@@ -404,11 +543,30 @@ class BasePred(ABC):
             for start in self.get_iterator(range(0, wgrp_df.shape[0], n_inchunk), pbar=inner_pbar, colour=colour):
                 wchunk_df = wgrp_df.iloc[start:start+n_inchunk]
                 cxidx = wchunk_df['xidx']
-                X = bed.read(index=np.s_[:,cxidx])
-                m = np.nanmean(X, axis=0)
-                idx = np.where(np.isnan(X))
-                s = np.nanstd(X, axis=0) if weight_type == 'standardized' else None
-                X[idx] = np.take(m, idx[1])
+                if algo == 'ori':
+                    X = bed.read(index=np.s_[:,cxidx], dtype=dtype)
+                    m = np.nanmean(X, axis=0)
+                    idx = np.where(np.isnan(X))
+                    s = np.nanstd(X, axis=0) if weight_type == 'standardized' else None
+                    X[idx] = np.take(m, idx[1])
+                elif algo == 'i8fast':
+                    if X is None: X = bed.read(index=np.s_[:,cxidx], dtype=dtype)
+                    nsamp,_= X.shape
+                    X8 = bed.read(index=np.s_[:,cxidx], dtype='int8')
+                    mask = (X8 == -127)
+                    m = X8.sum(axis=0).astype(dtype)
+                    msksum = mask.sum(axis=0).astype(dtype)
+                    m += msksum*127
+                    m /= (nsamp - msksum)
+                    try:
+                        assert X.shape == X8.shape[0]
+                        np.copyto(X, X8)
+                    except: X = X8.astype(dtype)
+                    for j in range(X.shape[1]): # <--- This one is faster!
+                        X[mask[:, j], j] = m[j]
+                    # for i in range(X.shape[0]):
+                    #     X[i, mask[i,:]] = m[mask[i,:]]
+                else: raise ValueError(f"Unknown algorithm: {algo}")
                 w = wchunk_df['allele_weight']; w=w if type(w) is pd.DataFrame else w.to_frame(name='prs')
                 if weight_type == 'standardized': w = s*w
                 yhat += X@w.values.astype(X.dtype) #chunk_df['allele_weight']
@@ -426,7 +584,7 @@ class BasePred(ABC):
         return output
             
     def srdpredict(self, srd, *, n_inchunk=1000, groupby=None, check='depreciated-arg', validate=True, 
-                localdump=False, weight_type='allele', trait_df=None, colour=None): # <-- The more esotheric stuff on this line
+                localdump=False, weight_type='allele', trait_df=None, colour=None, dtype=None): # <-- The more esotheric stuff on this line
         
         prstlogs = prst.utils.get_prstlogs()
         tic, toc = prstlogs.get_tictoc()
@@ -447,8 +605,8 @@ class BasePred(ABC):
             assert subsrd.count_A1 is True, 'Have to set count_A1=True, for this function to work, reinitialize snpreader with count_A1=True'
             ind = weights_df.snp.isin(srd.sid)
             if not ind.all(): raise Exception('Weight snps not in target. This is required, consider imputing target.')
-            from prstools.loaders import load_bimfam_from_srd
-            bim_df, fam_df = load_bimfam_from_srd(srd, skipifpresent=True)
+            from prstools.io import _load_bimfam_from_srd
+            bim_df, fam_df = _load_bimfam_from_srd(srd, skipifpresent=True)
             # First we validate SNP id alignment:
             
             if weights_df.snp.shape[0] != srd.sid.shape[0] or not np.all(weights_df.snp == bim_df.snp): # Do things to make this true
@@ -524,7 +682,7 @@ class BasePred(ABC):
         if localdump: output=locals()
         return output
     
-class MultiPred():
+class BaseMulti(): ## This is a base class so should Not generate objects i.e. instances.
     
     @classmethod
     def from_weights(cls, weights, sort=True, **kwg):
@@ -542,7 +700,7 @@ class MultiPred():
         assert len(weights_dt) > 0, 'weights_dt is empty'
         if ref_df is not None: allweights_df=ref_df.copy()
         elif len(weights_dt) == 1: return cls.from_weights(list(weights_dt.values())[0].copy(), verbose=verbose, **kwg)
-        else: raise NotImplementedError(f'... contact dev if this option (ref_df != None) is desired.')
+        else: raise NotImplementedError(f'... contact dev if this option (ref_df is None) is desired.')
         on_dt = dict() if on is None else dict(on=on)
         if len(on_dt) == 0: on=['snp','A1','A2']
         assert allweights_df[on].isna().sum().sum() == 0, f'cannot have Nans in starter columns on={on}'
@@ -550,10 +708,11 @@ class MultiPred():
         assert allweights_df['snp'].duplicated().sum() == 0, msg
         
         # merging mechanics:
-        for wname, curweights_df in tqdm(weights_dt.items()):
+        pre_self = cls(**kwg) ## <---- seems MultiPred & PredPRS should not be too classes ...
+        for wname, curweights_df in pre_self.get_iterator(weights_dt.items(), pbar=pre_self.pbar):
             curweights_df = curweights_df.copy() # This line is crucial for the PandasMimic type used to load from disk.
             cmissing = set(cls.default_weight_cols) - set(curweights_df.columns)
-            allweights_df = prst.loaders.merge_snps(allweights_df, curweights_df, flipcols=['allele_weight'], how='left', handle_missing='keep', **on_dt)
+            allweights_df = prst.merge_snps(allweights_df, curweights_df, flipcols=['allele_weight'], how='left', handle_missing='keep', **on_dt)
             allweights_df = allweights_df.rename(columns=dict(allele_weight=f"allele_weight_{wname}")).drop('rflip',axis=1)
 #             missing = set(cls.default_weight_cols) - set(allweights_df.columns)
 #             if missing: raise ValueError(f"Missing columns: {missing}")
@@ -582,7 +741,7 @@ class MultiPred():
         else: fn_lst=path_or_list; assert type(path_or_list) is list, 'Input to this function should be path or list.'
         msg = f'No file(s) {path_or_list} found (yes this code matches multiple files e.g. ./thesis_v*.tex)'
         assert len(fn_lst) > 0, msg
-        if type(ref_df) is str: ref_df, _ = prst.loaders.load_bimfam(ref_df, fam=False, verbose=verbose)
+        if type(ref_df) is str: ref_df, _ = prst.load_bimfam(ref_df, fam=False, verbose=verbose)
         class PandasMimic():
             def __init__(self,fn, ftype):
                 # potentially we can do a rapid check here for the weight loading.
@@ -590,7 +749,7 @@ class MultiPred():
                 self.fn = fn; self.ftype=ftype; self.pyarrow=pyarrow
                 self.sep=sep
             def copy(self):
-                return prst.loaders.load_weights(**vars(self))
+                return prst.io.load_weights(**vars(self))
         weights_dt=dict()
         for fn in fn_lst:
             weights_dt[fn]=PandasMimic(fn=fn, ftype=ftype)
@@ -598,9 +757,9 @@ class MultiPred():
         model = cls.from_dict(weights_dt, ref_df=ref_df, on=on, remove_allnan=remove_allnan, verbose=verbose, **kwg)
 
         return model
+
     
-from joblib import Parallel, delayed 
-class GroupByModel(MultiPred, BasePred):
+class GroupByModel(BaseMulti, BasePred):
     
     def __init__(self, _model, *, groupby, n_jobs=BasePred._default_n_jobs, pbar:bool=True, verbose=False, **xtras):
         
@@ -629,8 +788,6 @@ class GroupByModel(MultiPred, BasePred):
         if self.verbose: print('Starting iterations of model(s):')
         assert type(self.groupby) is str, 'groupby must be string, if you want to use multiple columns combined then contact dev.'
         
-        
-        
         nuniq = linkdata.get_sumstats_cur()[self.groupby].nunique()
         tot_iters = getattr(self._model,'n_iter',1)*nuniq
         pbar = self.get_pbar(iterator=range(tot_iters))
@@ -646,7 +803,6 @@ class GroupByModel(MultiPred, BasePred):
             from prstools.utils import save_to_interactive; save_to_interactive(dict(loc_dt=locals()))
             crash()
          
-            
         for grp, cur_linkdata in linkdata.groupby(self.groupby, sort=True, skipempty=True):
             model = self.get_model_clone()
             model.verbose = False; model.pbar = pbar
@@ -657,8 +813,8 @@ class GroupByModel(MultiPred, BasePred):
         self.combine_set_weights()
         return self
     
-    
     def fit(self, linkdata=None):
+        from joblib import Parallel, delayed
         
         ## Prep portion
         def worker(model, cur_linkdata, pbar, grp):
@@ -697,11 +853,11 @@ class GroupByModel(MultiPred, BasePred):
         assert hasattr(self,'model_dt'), f'No models present, so cannot create a working weights set for {self}.'
         weights_df = pd.concat([model.get_weights() for grp, model in self.model_dt.items()], axis=0) #for grp, model in self.model_dt.items():
         self._set_weights(weights_df, silentsort=True)
-        
-class PredPRS(MultiPred, BasePred):
     
-    "(not implemented yet) PredPRS: It predict polygenic risk scores if you give it weights (aka. give it the files produced by the methods in PRSTOOLS)(internal: PredPRS.from_weights())."
-        
+class MultiPRS(BaseMulti, BasePred):
+    "(not implemented yet) MultiPRS: It predict polygenic risk scores if you give it weights (aka. give it the files produced by the methods in PRSTOOLS)(internal: PredPRS.from_weights())."
+    # PredPRS Does not exist anymore
+    
     def __init__(self, *,
          pbar:bool=True,               # [not functional yet] Display a progress bar during optimization. 
          verbose:bool=False):           # Verbose mode when fitting the model.
@@ -713,9 +869,9 @@ class PredPRS(MultiPred, BasePred):
             if not (key in _excl_lst): 
                 self.__setattr__(key, item)
         self._kwg_dt = copy.deepcopy(kwg_dt)
-        if not self.pbar or not verbose: self.pbar = lambda x: x  
-        else: self.pbar = tqdm
-            
+#         if not self.pbar or not verbose: self.pbar = lambda x: x  
+#         else: self.pbar = tqdm
+
     @classmethod
     def from_cli_params_and_run(cls, *,  
         ref, # this is ref bkabkjfjkegkhjr kjhergjkerjhk
@@ -729,7 +885,7 @@ class PredPRS(MultiPred, BasePred):
         colmap=None
         ):
         
-        from prstools.loaders import LinkageData
+        from prstools.linkage import LinkageData
         
         # Gen output file name format and do quick check if output file can be saved before a lot of work is done:
         if out: out_fnfmt = cls.create_output_fnfmt(**locals())
@@ -746,7 +902,7 @@ class PredPRS(MultiPred, BasePred):
         if out: model.save_weights(out_fnfmt, ftype=ftype)
 
         return model
-       
+    
 try:
     profile
 except NameError:
@@ -757,26 +913,28 @@ class PRSCS2(BasePred):
     
     "PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors."
     _gig = None
+    _default_sampler='rue'
     
     def __init__(self, *,
          n_iter=1000,              # Total number of MCMC iterations.
-         n_burnin=0.5,             # Number of burn-in iterations if larger than 1 or fraction of n_iter if smaller then 1.
+         n_burnin=0.5,             # Number of burn-in iterations if larger than 1 or fraction of n_iter if smaller than 1.
          n_slice=1,                # Thinning of the Markov chain.
          shuffle=False,
          seed=-1,                  # Random seed for reproducibility.
          a=1.0,                    # Parameter a in the gamma-gamma prior.
          b=0.5,                    # Parameter b in the gamma-gamma prior. 
-         phi=-1.,                  # Global shrinkage parameter phi. If phi is not specified, it will be learnt from the data using a Bayesian approach
+         phi=-1.,                  # Global shrinkage parameter phi. If phi is not specified, it will be learnt from the data using a Bayesian approach.
          clip=1.,                  # Clip parameter. The default works best in pretty much all cases.
-         sampler='Rue',            # Sampler algorithm. Rue sampling is the original sampler, which gives good results.
-         groupby:str='chrom',      
+         sampler='default',        # Sampler algorithm. The default is Rue sampling, which is the original sampler and gives good results.
+         groupby:str='chrom',
          local_rm:bool=False,    
-         compute_score:bool=False,   
+         compute_score:bool=False,
          clear_linkdata:bool=True,
+         scaling='ref',
          pop='pop',
-         n_jobs=BasePred._default_n_jobs, # This sets the number of jobs for parallel processing.
-         pbar:bool=True,              
-         verbose:bool=False): 
+         n_jobs=BasePred._default_n_jobs, # This sets the number of jobs for parallel processing. 
+         pbar:bool=True,
+         verbose:bool=False):
         
         # Stuff all the args into fields.
         _excl_lst = ['self', 'kwg_dt']
@@ -796,9 +954,10 @@ class PRSCS2(BasePred):
         self.n_burnin = n_burnin
         assert (n_iter-n_slice) > n_burnin
         self.sampler=str(sampler).lower()
+        if self.sampler == 'default': self.sampler = self._default_sampler
+        #assert self.sampler in ['rue','bhat','sld']
         self.pop = self.pop.upper()
-        assert self.sampler in ['rue','bhat','sld']
-    
+
     
 #     def _gig(self, p,a,b, psi=None):
 #         x = np.zeros(b.shape) if psi is None else psi
@@ -807,14 +966,14 @@ class PRSCS2(BasePred):
 #             #psi[j] = gigrnd(a-0.5, 2.0*delta[j], n_eff*beta[j]**2/sigma)#, seed=seed)
 #         # else: raise ValueError(f"Option not recognized: {self.gigsampler}")
 #         return x
-    
+
     def _compute_beta_tilde(self, *, beta, i_reg, linkdata):
         beta_tilde = linkdata.get_beta_marginal_region(i=i_reg)
         if self.local_rm: # RM
             raise NotImplementedError()
         return beta_tilde
     
-    @profile
+#     @profile 
     def fit(self, linkdata=None):
         
         # Loading variables:
@@ -842,7 +1001,7 @@ class PRSCS2(BasePred):
             quad = 0; i_reg=None
             if not self.pbar:
                 do_show = ((itr % 10 == 0) | (itr<3)) & verbose
-                if do_show: print(f'-> itr={itr}, i_reg={i_reg} <-  ', end='\r')
+                if do_show: print(f'-> itr={itr}, i_reg={i_reg} <-  ', end='\r') 
             for i_reg in self._order(i_lst):
 
                 # Compute beta_tilde, a corrected GWAS sumstat zscore [=RM]:
@@ -902,7 +1061,6 @@ class PRSCS2(BasePred):
         if verbose: print('----- Done with Sampling -----')
         return self
 
-
 if np.all([x in sys.argv[-1] for x in ('jupyter','.json')]+
           ['ipykernel_launcher.py' in sys.argv[0]] + 
           [not '__file__' in locals()]):
@@ -912,6 +1070,6 @@ if np.all([x in sys.argv[-1] for x in ('jupyter','.json')]+
         with open('../prstools/models/_base.py', 'w') as f: f.write(code)
         print('Written to:', f.name); time.sleep(0.03)
         print('starting here in models:')
-        get_ipython().system('time python ../prstools/_cmd.py --dev')
+        get_ipython().system('python ../prstools/_cmd.py --dev-secret')
         #!prst --dev | head -3
     print('Done')

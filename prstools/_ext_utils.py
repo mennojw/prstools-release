@@ -16,7 +16,7 @@ import scipy as sp
 import pandas as pd
 
 from IPython.display import Audio, display, Javascript
-from IPython import get_ipython
+from IPython import get_ipython as _get_ipython
 
 try:
     import matplotlib.pyplot as plt
@@ -246,7 +246,7 @@ def psrc(obj, return_source=False):
         return src
 
 def jobinfo(job, return_string=False):
-    string = get_ipython().system('jobinfo {job.job_id}')
+    string = _get_ipython().system('jobinfo {job.job_id}')
     print(string)
     if return_string:
         return string

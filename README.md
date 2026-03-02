@@ -13,10 +13,8 @@ It makes PRS generation easier, compared to previous tools, by:
 - Automatic generation of the PRS Prediction for target plink files.
 
 All the above, for a real GWAS sumstat, within 30 minutes using only
-**1** command .
-
-Installation and running the demo example should not take more than 10
-minutes.
+**1** command. Installation and running the demo example should not take
+more than 10 minutes.
 
 We are actively developing `prstools` and feedback by mail or our
 [feedback form](https://forms.gle/TnvNyBX6qDy7Vupn9) (with 🏆 lottery)

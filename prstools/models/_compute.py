@@ -23,9 +23,13 @@ def g(x, sd, td, f1, f2):
 
     return f
 
+
 def gigrnd(p, a, b):
     # setup -- sample from the two-parameter version gig(lam,omega)
-    p = float(p); a = float(a); b = float(b)
+    #import prstools as prst
+    #prst.utils.get_ip().embed()
+    def as_float(x): return float(np.asarray(x).item())
+    p = as_float(p); a = as_float(a); b = as_float(b)
     lam = p
     omega = math.sqrt(a*b)
 
