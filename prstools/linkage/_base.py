@@ -738,11 +738,11 @@ class BaseLinkageData():
         import gc; gc.collect()
         if overwrite:
             prefn = fnfmt1.format_map(locals())
-            pat = join(split(prefn)[0],'[a-z]*')
+            pat = join(split(prefn)[0],'ldblk_[a-z]*')
             print(pat); fn_lst = glob.glob(pat)
             if len(fn_lst) > 30: Exception(f'Using {pat} trying to remove mor than 30 files, probably too much to remove, please clear that target directory manually')
             else: print(f'Removing/Overwriting {len(fn_lst)} files.')
-            for oldfn in fn_lst: os.remove(oldfn)
+            for oldfn in fn_lst: os.remove(oldfn) # os.remove only does files here (fails on dir input)
         def fun(chrom, **kwg):
             chrom=int(chrom)
             kwg['chrom'] = chrom
@@ -805,7 +805,7 @@ class BaseLinkageData():
             sst_df = geno_dt['sst_df']
             if 'Ds' == varname:
                 D=self.get_specified_data_region(i=i, varname=varname.rstrip('s'), checkdims=False)
-                bidx = sst_df['bidx'] if 'bidx' in sst_df.columns else np.arange(len(D))
+                bidx = sst_df['bidx'] if 'bidx' in sst_df.columns else np.arange(len(D)) # This will fail if D and sst_df dont match in dims
                 preDs = D[bidx][:,bidx]; info=False
                 Ds, info = prst.io.validate_linkage(preDs, return_info=True) if self._validate_linkage else preDs
                 if info: self._npd_cnt = self._npd_cnt + 1 # Like this to prevent class attribute to get used (not +=)
@@ -1229,11 +1229,12 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         if verbose and target: print('& target. ', end='', flush=True)
         sst_df = prst.merge_snps(sst_df, target_df, flipcols=[], handle_missing='filter', extradropdupcols=ddups, warndupcol=True) if target else sst_df
         n_match = sst_df.shape[0]
-        if verbose: print(f'-> {n_match:,} common variants after matching ' +
+        msg = (f'-> {n_match:,} common variants after matching ' +
                           f'reference ({(n_match/ref_df.shape[0])*100:.1f}% incl.), ' +
                           (f'target ({(n_match/target_df.shape[0])*100:.1f}% incl.) and ' if target else 'and ') +
-                          f'sumstat ({(n_match/orisst_df.shape[0])*100:.1f}% incl.).'
-                          ) # generate spacing between loading and fit()
+                          f'sumstat ({(n_match/orisst_df.shape[0])*100:.1f}% incl.).')
+        if verbose: print(msg)
+         # generate spacing between loading and fit()
         if verbose and hasattr(orisst_df, 'msg') and cli and type(orisst_df.msg) is str: print(orisst_df.msg, '\n')
         elif verbose: print('\n')
         linkdata = linkdata.merge(sst_df, warndupcol=False, inplace=True)

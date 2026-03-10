@@ -359,14 +359,13 @@ def get_regid(prst_df, regdef=None, fixchromends=True):
     else: raise TypeError(f'type={type(regdef)} not recognized. Type needs to be string or dataframe.')
     prst_df = validate_dataframe_index(prst_df)
     # regdef_df = validate_regdef_df(regdef_df)
-    warnings.warn('regdef needs a validation step before it is used in prod code!, also sorting of input needs to be considered.')
     # Loop through chromosomes
     for chrom, cur_df in prst_df.groupby('chrom'):
         cdef_df = regdef_df[regdef_df.chrom.astype(type(chrom))==chrom].copy()
         if cdef_df.empty: continue # Jump to next if it is empty
         # Iterate over regions and assign regid
-        if fixchromends:
-            cdef_df.loc[cdef_df.index[0], 'start'] = 0
+        if fixchromends: ## since regdef is asserted to be sorted the following is ok
+            cdef_df.loc[cdef_df.index[0], 'start'] = 0 #=ok, see 1 line above
             cdef_df.loc[cdef_df.index[-1], 'stop'] = 1e12
         for _, row in cdef_df.iterrows():
             mask = (cur_df['pos'] >= row['start']) & (cur_df['pos'] < row['stop'])
@@ -668,7 +667,7 @@ def check_alignment_snps(*args, dropsnps=False, on=['snp','A1','A2']):
         for argx in args[1:]:
             assert (arg0[col] == argx[col]).all(), f'Column \'{col}\' not matching for input arguments.'
 
-def nanslicer_funct(start_df, cols, verbose=False, ispretest=False):
+def naninfslicer_funct(start_df, cols, inf=False, verbose=False, ispretest=False):
     df = start_df.copy()
     startlen = df.shape[0]
     df = df.dropna(subset=cols)
@@ -676,12 +675,22 @@ def nanslicer_funct(start_df, cols, verbose=False, ispretest=False):
     numofnans = startlen-endlen
     if verbose and numofnans>0 : print(f'NaN values found in sumstat somewhere in these columns; {cols}: '
         f'{numofnans} SNPs removed from the starting total of {startlen:,} ({100*numofnans/startlen:.1f}%), {endlen:,} SNPs left.')
+    if inf:
+        startlen = df.shape[0]
+        ind = (df[cols].abs() > 1e99).any(axis=1)
+        numofinfs = ind.sum()
+        if numofinfs: df = df[~ind]
+        endlen = df.shape[0]
+        msg = (f'Inf values found in sumstat somewhere in these columns; {cols}: {numofinfs} SNPs removed from the starting '
+              f'total of {startlen:,} ({100*numofnans/startlen:.1f}%), {endlen:,} SNPs left. (e.g. possible reason: standard-error=0 effect/SE=inf).')
+        if verbose and numofinfs: print(msg)
     if not ispretest and endlen < 5: 
         cprint_input_df(start_df, show_dims=True)
         raise Exception('Less than 5 SNPs left after processing, something was wrong with the input sumstat, which could mean it will need hands-on processing.')
     return df
 
-def compute_pvalbetase(df, *, calc_lst=['pval','beta','se_beta'], pvalmin=1e-323, copy=True, pretest=False, slicenans=True, verbose=False):
+def compute_pvalbetase(df, *, calc_lst=['pval','beta','se_beta'], pvalmin=1e-323, copy=True, pretest=False, slicenaninfs=False, verbose=False):
+    assert slicenaninfs == False
     if copy: df=df.copy()
     if 'pval' in calc_lst: df['pval'] = 2*sp.stats.norm.cdf(-abs(df.beta_mrg)*np.sqrt(df.n_eff))
     if 'beta' in calc_lst: df['beta'] = df['beta_mrg']/df['std_sst'] # assumption var[y] ==1 !
@@ -761,7 +770,7 @@ def check_reqcols_sst(orisst_df, *, reqcols, colmap=None,
         cprint_input_df(sst_df)
         raise Exception(f'Columns {dupcols} are duplicates, which makes it unclear which of these columns to select. Please remove these columns.')
 
-def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy=True, ispretest=False, slicenans=True, verbose=False, cli=False):
+def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy=True, ispretest=False, slicenaninfs=True, verbose=False, cli=False):
     # --- df is the sst_df
     if copy: df = df.copy(); 
     
@@ -780,7 +789,7 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
                 n_eff = df['n_eff']; n_eff_msg = np.median(n_eff)
             else: raise ValueError(f'Option not recog: {n_eff_handling}. Options are "topmedian" and "raw"')
         if calc_beta_mrg == 'se' or {'se_beta','beta','n_eff'}.issubset(cols):
-            if slicenans: df=nanslicer_funct(df,testcols,verbose, ispretest=ispretest)
+            if slicenaninfs: df=naninfslicer_funct(df, testcols, verbose=verbose, ispretest=ispretest)
             pre_std_sst = 1. / (np.sqrt(n_eff+1) * df['se_beta']); k=int(len(pre_std_sst) * 0.025)
             #pre_std_sst = 1. / np.sqrt((n_eff+1) * df['se_beta']**2); k=int(len(pre_std_sst) * 0.025) #old
             #df.loc[:,'beta_mrg'] = df.beta/np.sqrt((n_eff+1)*df.se_beta**2) # old
@@ -791,7 +800,7 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
             msg = f'Computed beta marginal (=X\'y/n) from sumstat using beta and its standard error and sample size (n_eff={int(n_eff_msg)}).'; df.msg=msg
             if verbose and not cli: print(msg)
         elif calc_beta_mrg == 'pval' or {'pval','beta','n_eff'}.issubset(cols):
-            if slicenans: df=nanslicer_funct(df, testcols,verbose, ispretest=ispretest)
+            if slicenaninfs: df=naninfslicer_funct(df, testcols, verbose=verbose, ispretest=ispretest)
             if np.sum(df.pval == 0):
                 pvalpadder=1e-323; df.loc[df.pval == 0,'pval'] = pvalpadder
                 warnings.warn(f'Zero(s) were detected in the p-values, padding with smallest non-zero values (={pvalpadder}),'
@@ -803,6 +812,7 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
         else:
             cprint_input_df(df); cnames =' or '.join([f'\'{elem}\'' for elem in 'SE/se_beta/P/pval'.split('/')])
             raise Exception(f'Missing a required column (named: {cnames}) needed for beta marginal/zscore computations')
+        if slicenaninfs: df=naninfslicer_funct(df, cols=['beta_mrg'], inf=True, verbose=verbose, ispretest=ispretest)
     return df
 
 def _pd_read_csv(*args, max_arrow_tries=2, arrow_sleep=0.5, **kwg):
@@ -819,6 +829,8 @@ def _pd_read_csv(*args, max_arrow_tries=2, arrow_sleep=0.5, **kwg):
                 retryable = cond0 and cond1
                 # Not retryable → propagate immediately (user error etc.)
                 if not retryable: raise e
+                if len(args) > 0: fn = args[0]
+                else: fn = 'unknown-file'
                 warnings.warn(f"{fn}: pyarrow CSV parser issue detected, retrying.")
                 time.sleep(arrow_sleep)
         msg = f"{fn}: pyarrow CSV parser failed after {max_arrow_tries} attempts; falling back to pandas C engine"
@@ -869,7 +881,7 @@ def _validate_kwg_load_fun(fn, *, load_fun, ukwg_lst=None, **kwg): ## keep close
     raise ori_err
 
 def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_mrg=True, n_gwas=None, n_eff_handling='topmedian', delimiter=None, chrom=None, comment=None,
-             reqcols=['snp','A1','A2',('beta','oddsratio'),('pval','se_beta')], pyarrow=True, pretest=True, check=True, slicenans=True, validate=True, verbose=True, 
+             reqcols=['snp','A1','A2',('beta','oddsratio'),('pval','se_beta')], pyarrow=True, pretest=True, check=True, slicenaninfs=True, validate=True, verbose=True, 
              nrows=None, testnrows=100, ispretest=False, cli=False, readkwg=None): # do not change pretest
 
     # Hey! I take about 7 seconds on 20M snps with Pyarrow, Optimal enough for now,
@@ -918,7 +930,7 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
         from contextlib import nullcontext
         with (warnings.catch_warnings(record=True) if ispretest else nullcontext()):
             sst_df = compute_beta_mrg(sst_df, calc_beta_mrg=calc_beta_mrg, ispretest=ispretest,
-                      n_eff_handling=n_eff_handling, slicenans=slicenans, verbose=verbose, cli=cli)
+                      n_eff_handling=n_eff_handling, slicenaninfs=slicenaninfs, verbose=verbose, cli=cli)
     
     if validate: 
         sst_df = validate_dataframe_index(sst_df, warn=False)
@@ -1147,6 +1159,10 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', delimiter='d
         if reset_index: bim_df = validate_dataframe_index(bim_df, warn=False)
         if add_AX: bim_df = get_AX(bim_df)
         n_snps_end = bim_df.shape[0]
+        if not check and bim_df.shape[0]<1e2: 
+            msg = (f'\033[1;31mWARNING: The size of the loaded bim set is less then 100 (={bim_df.shape[0]} snps). '
+                  'Often a sign something is going wrong (e.g. chrom of choice not present input bim file) \033[0m')
+            warnings.warn(msg)
     if verbose:
         lst=[]
         if bim: inject = f', selecting {n_snps_end:,} with chrom={chrom}' if 'ind' in locals() and ind.shape != bim_df.shape[0] else ''
@@ -1327,10 +1343,30 @@ def load_linkagedata(fn, load_all=False):
     if load_all: linkdata.load_linkage_allregions()
     return linkdata
 
-def load_regdef(regdef_key='1blk_shift=0', fnfmt='./data/defs/regdef/regions_{regdef_key}.regdef.tsv'):
+def check_regdef(regdef_df, allow_overlap=False, verbose=False):
+    assert not allow_overlap, 'Need to implement versions with allowed overlap'
+    msg = 'Duplicated region-ids in regdef. This means the region definition is defective'
+    assert regdef_df['regid'].duplicated().sum() == 0, msg
+    mcols = {'chrom','start','stop','regid'} - set(regdef_df.columns)
+    if len(mcols) > 0: raise ValueError(f"Not all req columns present in regdef_df. Missing columns: {mcols}")
+    assert regdef_df.sort_values(['chrom','start']).index.equals(regdef_df.index), 'Seems regdef was not properly sorted, hence corrupted/invalid'
+    for chrom, df in regdef_df.groupby('chrom'):
+        msg = 'Overlapping regions in regdef_df, hence it is corrupted/invalid.'
+        assert (df['start'].values[1:] >= df['stop'].values[:-1]).all(), msg
+    if verbose: print('regdef_df is valid! (i.e. required cols, sorted, unique regids, and no overlapping regions)')
+
+def load_regdef(regdef='ldgm-all-hg38', fnfmt='./data/defs/regdef/{regdef}.regdef.tsv', check=True):
     curdn = os.path.dirname(prst.__file__)
     fnfmt = os.path.join(curdn, fnfmt)
-    regdef_df = pd.read_csv(fnfmt.format(regdef_key=regdef_key), delimiter='\t') # dataframe with region definitions 
+    fn = fnfmt.format(regdef=regdef)
+    if not os.path.exists(fn):
+        dn = os.path.dirname(fn)
+        lst = [os.path.basename(elem).replace('.regdef.tsv','') for elem in glob.glob(dn+'/*.regdef.tsv')]
+        msg = f'{fn} \n--> You should pick from {lst} (all @ {dn}).'
+        raise FileNotFoundError(msg)
+    regdef_df = pd.read_csv(fn, delimiter='\t') # dataframe with region definitions
+    assert check, 'always doing check!'
+    check_regdef(regdef_df)
     return regdef_df
 
 def load_prscs_ldblk(fn,blkid):

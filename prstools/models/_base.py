@@ -297,6 +297,7 @@ class BasePred(ABC):
         if out: model.save_weights(out_fnfmt, ftype=ftype) # Store fitting result
         
         if pred == 'auto' and not hasattr(model, 'weights_df'): pred = 'no'
+        if pred == 'auto' and chrom != 'all': pred='no'
         if pred and pred != 'no': # Prediction
             #model.remove_linkdata(); linkdata.clear_linkage_allregions # seems to do pretty much nothing.. anyway xp was 5% mem, which jumped to 20 and 60 later
             try: 
