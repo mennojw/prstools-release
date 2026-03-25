@@ -210,7 +210,12 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
     subparser = parser.add_subparsers(title="Models & Utility Commands", dest="command", metavar='<command>'+' \b'*2, help="") #trick: +' \b'*0
     extcmds = []; prc = process_argkwargs
     for i, spkwg in enumerate(subparserkwg_lst):
-        if spkwg['subtype'] == 'BasePred':
+
+        if spkwg['subtype'] == 'external':
+            linked_parser = subparser.add_parser(spkwg['cmdname'], help=spkwg['help'], description='unneeded', add_help=False) #, description='descption prscx')
+            linked_parser.set_defaults(func=spkwg['func'])
+            extcmds+=[spkwg['cmdname']] 
+        elif spkwg['subtype'] == 'BasePred':
             # Create Model parser and add basic help:
             basemodels = ['prscs2','prscs2a']
             
@@ -240,7 +245,8 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                                "Current config relevant to this functionality (prstdatadir: {prstdatadir}, auto_download: {auto_download}).")))
             data_group.add_argument("--target", "-t", type=str_or_none,
                     **prc(dict(required=True, metavar='<bim-prefix>',
-                        help="Specify the bim file or its prefix of desired target dataset. The bim file should be in plink format.")))
+                        help="Specify the bim file or its prefix of desired target dataset. The bim file should be in plink format. You can also set the target to 'none' "
+                               "in which case the variant set will not be filtered for variants present in the target set.")))
             data_group.add_argument("--sst","-s", **prc(dict(required=True, metavar='<file>', 
             help="The summary statistics file from which the model will be created. The file should contain columns: SNP, A1, A2, BETA or OR, P or SE information. "
                   "At the moment, the file is assumed to be tab-seperated, if you like other formats please let devs know. "
@@ -264,7 +270,8 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                                     "the PRS-CS standard sumstat formatting.")))
             data_group.add_argument("--pred", "-p", 
                     **prc(dict(required=False,metavar='<yes/no>',type=str, default='auto',
-                                    help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset (yes/no/auto).")))
+                                    help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. With the 'auto' option (which is the default) "
+                                            "the tool tries to generate a prediction unless the --chrom option is set. Available options: (yes/no/auto).")))
 
             # Add model-related arguments (hyper parameters and such):
             modelargs_group = model_parser.add_argument_group('Model Arguments (all optional)')
@@ -277,11 +284,8 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             # ..  .set_defaults(func=PRSCS2.run_from_cli_params_thiswholenamecouldchange_imasocalledclassmethod, .. etc
             func = retrieve_classmethod(clsname=spkwg['clsname'], methodname='from_cli_params_and_run')
             model_parser.set_defaults(func=func, pkwargs=spkwg['pkwargs'], model_parser=model_parser)
-        elif spkwg['subtype'] == 'external':
-            linked_parser = subparser.add_parser(spkwg['cmdname'], help=spkwg['help'], description='unneeded', add_help=False) #, description='descption prscx')
-            linked_parser.set_defaults(func=spkwg['func'])
-            extcmds+=[spkwg['cmdname']] 
         elif spkwg['subtype'] == 'PRSTCLI':
+            print(spkwg['subtype'], spkwg['cmdname'])
             subcmd_parser = subparser.add_parser(spkwg['cmdname'], help=spkwg['help'],
                                     description=spkwg['description'],
                                     epilog=spkwg['epilog'],
@@ -353,10 +357,7 @@ def main(argv=None):
         seed = args_dt['seed']
         displayseed = f'Random seed:       {seed}'
     else: displayseed=None
-#     print( args_dt.get('pkwargs',''))
     if 'n_jobs' in args_dt.get('pkwargs',''):
-#         import prstools as prst
-#         prst.utils.get_ip().embed()
         if not 'n_jobs' in args_dt:
             n_jobs = str(args_dt['pkwargs']['n_jobs']['kwargs']['default'])
         else: n_jobs = str(args_dt['n_jobs'])

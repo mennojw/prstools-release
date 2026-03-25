@@ -108,7 +108,7 @@ def validate_dataframes_premerge(df0,df1):
         df1.columns = df1.columns if n1==2 else pd.MultiIndex.from_tuples([(col, '') for col in df1.columns])
     return df0, df1
 
-def validate_linkage(D, frac=0.001, atol=1e-6, clip=0., return_info=False):
+def validate_linkage(D, frac=1e-4, atol=1e-6, clip=0., return_info=False):
     assert 0 < frac < 1, 'frac needs to be between 0 and 1'
     diag = D.diagonal()
     ndiag = diag*(1+frac)
@@ -353,6 +353,7 @@ def get_rsnum(df, inplace=True):
     return df
 
 def get_regid(prst_df, regdef=None, fixchromends=True):
+    prst_df = validate_dataframe_index(prst_df)
     if regdef is None: regdef_df = load_regdef()
     elif type(regdef) is str: regdef_df = load_regdef(regdef) # This not functional yet
     elif type(regdef) is pd.DataFrame: regdef_df = regdef
@@ -369,7 +370,8 @@ def get_regid(prst_df, regdef=None, fixchromends=True):
             cdef_df.loc[cdef_df.index[-1], 'stop'] = 1e12
         for _, row in cdef_df.iterrows():
             mask = (cur_df['pos'] >= row['start']) & (cur_df['pos'] < row['stop'])
-            prst_df.loc[mask.index[mask], 'regid'] = int(row['regid'])
+            idx = mask.index[mask].to_numpy()
+            prst_df.loc[idx, 'regid'] = int(row['regid'])
     indnans = prst_df['regid'].isna(); nansum = indnans.sum()
     if nansum > 0: 
         perc = (nansum/len(indnans))*100
@@ -531,7 +533,7 @@ def get_chrom_map(flow='in', version='onlyonenow'):
     return chrom_map
 
 def merge_snps(df0, df1, *, flipcols, afcols=[], how='left', on=['snp','AX'], reset_index=True, extradropdupcols=False, dropalldupcols=False,
-               dropduprightcols=['chrom','snp','cm','pos','A1','A2','maf_ref','std_ref','AX'], warndupcol=True, removedups=True,
+               dropduprightcols=['chrom','snp','cm','pos','A1','A2','maf_ref','std_ref','af_A1_ref','AX'], warndupcol=True, removedups=True,
                seperate=False, handle_missing=False, allow_right_filter=True,
                req_all_right=None # or all entries in the right dataframe being matchable to left 
               ):
@@ -682,7 +684,7 @@ def naninfslicer_funct(start_df, cols, inf=False, verbose=False, ispretest=False
         if numofinfs: df = df[~ind]
         endlen = df.shape[0]
         msg = (f'Inf values found in sumstat somewhere in these columns; {cols}: {numofinfs} SNPs removed from the starting '
-              f'total of {startlen:,} ({100*numofnans/startlen:.1f}%), {endlen:,} SNPs left. (e.g. possible reason: standard-error=0 effect/SE=inf).')
+              f'total of {startlen:,} ({100*numofinfs/startlen:.1f}%), {endlen:,} SNPs left. (e.g. possible reason: standard-error=0 effect/SE=inf).')
         if verbose and numofinfs: print(msg)
     if not ispretest and endlen < 5: 
         cprint_input_df(start_df, show_dims=True)
@@ -819,7 +821,7 @@ def _pd_read_csv(*args, max_arrow_tries=2, arrow_sleep=0.5, **kwg):
     try:
         for i in range(max_arrow_tries):
             try:
-                return pd.read_csv(*args,**kwg)
+                return pd.read_csv(*args, **kwg)
             except Exception as e:
                 try: import pyarrow.lib
                 except ImportError: pyarrow = None
@@ -835,7 +837,7 @@ def _pd_read_csv(*args, max_arrow_tries=2, arrow_sleep=0.5, **kwg):
                 time.sleep(arrow_sleep)
         msg = f"{fn}: pyarrow CSV parser failed after {max_arrow_tries} attempts; falling back to pandas C engine"
         warnings.warn(msg)
-        kwargs['engine']='c'
+        kwg['engine']='c'
         return pd.read_csv(*args, **kwg)
     except Exception as e:
         raise prst.errors.LoadError(e, stage=1) from e
@@ -1150,7 +1152,7 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', delimiter='d
             bim_df["chrom"] = bim_df["chrom"].replace(cmap) # the to_numeric() step can be slow, speedup is involved.
             bim_df['chrom'] = pd.to_numeric(bim_df['chrom'], errors='coerce').astype('Int64') # rrx= bim_df['chrom'].unique() appears fast, so perhaps fix, mod cmap
         if not chrom in ['*','all']:
-            #ind = bim_df['chrom'] == bim_df['chrom'].dtype.type(chrom) # old one 
+            #ind = bim_df['chrom'] == bim_df['chrom'].dtype.type(chrom) # old one  
             ind = bim_df['chrom'].isin(get_chrom_lst(chrom))
             bim_df = bim_df[ind]
         if fil_arr is not None:
@@ -1159,10 +1161,10 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', delimiter='d
         if reset_index: bim_df = validate_dataframe_index(bim_df, warn=False)
         if add_AX: bim_df = get_AX(bim_df)
         n_snps_end = bim_df.shape[0]
-        if not check and bim_df.shape[0]<1e2: 
-            msg = (f'\033[1;31mWARNING: The size of the loaded bim set is less then 100 (={bim_df.shape[0]} snps). '
-                  'Often a sign something is going wrong (e.g. chrom of choice not present input bim file) \033[0m')
-            warnings.warn(msg)
+        if pretest and bim_df.shape[0]<1e2:
+            msg = (f'\033[1;31mWARNING: The size of the loaded bim set is less than 100 (= {bim_df.shape[0]} snps). '
+                  'Often a sign something is going wrong (e.g. chrom of choice not present input bim/reference file) \033[0m')
+            print(''); warnings.warn(msg)
     if verbose:
         lst=[]
         if bim: inject = f', selecting {n_snps_end:,} with chrom={chrom}' if 'ind' in locals() and ind.shape != bim_df.shape[0] else ''

@@ -1,6 +1,6 @@
 #!/bin/bash -i
 source ~/.bashrc
-set -e  # Exit on error 
+set -e  # Exit on error
 ORIG_DIR="$(pwd)"
 source ~/cmd/_geno
 #conda activate geno
@@ -23,7 +23,7 @@ sed -i '' "s/^_date = .*/_date = \"$TODAY\"/" prstools/__init__.py
 cd "$ORIG_DIR"
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
 cd ./prstools  # ok the order of all this seems funny, but im not gonna change it for now
-python ./_cmd.py --dev # !!!ahh yess, to not have all the alpha code references.
+python ./_cmd.py --dev-secret # !!!ahh yess, to not have all the alpha code references. 
 cd "$ORIG_DIR"
 
 

@@ -4,7 +4,7 @@
 # Something python bash python something (test)dur ergerg -- new nb overwrite (oke now another overwrite in nb mjwt)
 # Doing something to make all the import suggestions in the code etc work nicely will come later
 # this requires writing fancy __init__.py files and having subdirs, _stuff.py files and more..
-# I put this here, because I had a hunch it would generate desired python behavior.
+# I put this here, because I had a hunch it would generate desired python behavior. 
 # __all__ = ['Tree','fullvars','sizegb','beep','Timer','implot', 'redo_all_above', 'do_all_above', 'Struct'] 
 
 import time, os, pickle, inspect, functools, contextlib, warnings
@@ -353,7 +353,7 @@ def get_memory_usage(show=True, prefix=''):
         print(f"{prefix}Memory usage: {gbs:.3} GB",)
     return gbs
 
-def clear_memory(malloc_trim=True):
+def clear_memory(malloc_trim=True, postsleep=False):
     if malloc_trim:
         try:
             import ctypes
@@ -363,6 +363,7 @@ def clear_memory(malloc_trim=True):
             pass
     import gc
     gc.collect()
+    if postsleep: time.sleep(postsleep)
     
 # True
 if '_isdevenv_prstools' in locals():

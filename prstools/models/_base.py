@@ -36,9 +36,7 @@ class BasePred(ABC):
     _default_n_jobs=4
     algo_pred = 'i8fast'
     
-    def remove_cache(self):
-        if hasattr(self,'cache_dt'):
-            del self.cache_dt
+
     
     def _checktype(self, obj, classname): # This methods needs some work
         #if not (type(obj).__name__ in list(classnames)): raise TypeError(f'{type(obj)} not allowed as linkdata input. Must be {classnames}')        
@@ -88,168 +86,66 @@ class BasePred(ABC):
         return dedent(epilog)
     
     @classmethod
-    def _get_cli_spkwg(cls, basic_pkwargs='figurethisout'):
-        
-        
-        @classmethod
-        def from_testing(cls,
-                destdir:str=None, # Directory in which all the data will be downloaded. Option required if you want the download to start. w00t w00t leet
-                pattern:str='ALL',# A string pattern that retrieves every file that it matches. Matches everything by default. Without --destdir option (required to start downloading) one can see which files get matched.
-                ):
-            return 'magic'
-
-        @classmethod
-        def _get_cli_spkwg(cls, moar=12):
-            from textwrap import dedent
-            from prstools.utils import retrieve_pkwargs
-            basic_pkwargs = dict(basics=dict(
-                args=['-h', '--help'], 
-                kwargs=dict(action='help', help='Show this help message and exit.')))
-            spkwg = cls ### QUIKC HACK
-            doc = dedent(cls.__doc__)
-            new_spkwg = dict(
-                cmdname    = spkwg.__name__.lower(), #command name
-                clsname    = spkwg.__name__, #class name
-                description= doc,
-                help       = doc.split('\n')[0],
-                epilog     = spkwg._get_cli_epilog(),
-                modulename = spkwg.__module__,
-                groups     = dict(
-                    generaloptions=dict(
-                        grpheader='General Options',
-                        pkwargs=basic_pkwargs),
-                    dataoptions=dict(
-                        grpheader='Data Options',
-    #                     pkwargs={**retrieve_pkwargs(cls.from_cli_params_and_run)}),
-                        pkwargs={**retrieve_pkwargs(cls.from_testing)}),
-                    modeloptions=dict(
-                        grpheader='Model Options',
-                        pkwargs=retrieve_pkwargs(spkwg))),
-    #             subtype    = 'BasePred'
-                subtype    = 'PRSTCLI'
-            )
-
-
-            return new_spkwg
-        
-        
-        from textwrap import dedent
+    def _get_cli_spkwg(cls, basic_pkwargs=True):
         from prstools.utils import retrieve_pkwargs
-        basic_pkwargs = dict(basics=dict(
-            args=['-h', '--help'], 
-            kwargs=dict(action='help', help='Show this help message and exit.')))
-        spkwg = cls ### QUIKC HACK
-        doc = dedent(cls.__doc__)
-        new_spkwg = dict(
-            cmdname    = spkwg.__name__.lower(), #command name
-            clsname    = spkwg.__name__, #class name
-            description= doc,
-            help       = doc.split('\n')[0],
-            epilog     = spkwg._get_cli_epilog(),
-            modulename = spkwg.__module__,
-            groups     = dict(
-                generaloptions=dict(
-                    grpheader='General Options',
-                    pkwargs=basic_pkwargs),
-                dataoptions=dict(
-                    grpheader='Data Options',
-#                     pkwargs={**retrieve_pkwargs(cls.from_cli_params_and_run)}),
-                    pkwargs={**retrieve_pkwargs(cls.from_testing)}),
-                modeloptions=dict(
-                    grpheader='Model Options',
-                    pkwargs=retrieve_pkwargs(spkwg))),
-            subtype    = 'PRSTCLI'
-        )
-        
+        from textwrap import dedent
         
         if basic_pkwargs and type(basic_pkwargs) is bool:
-            basic_pkwargs = dict(basics=dict(
-                    args=['-h', '--help'], 
-                    kwargs=dict(action='help', help='Show this help message and exit.')))
+            basic_pkwargs = dict(
+                basics=dict(args=['-h','--help'], kwargs=dict(action='help', help='Show this help message and exit.')),
+                cpus=dict(args=['--cpus','-c'], kwargs=dict(metavar='<number-of-cpus>', default=prst._cmd.get_default_cpus(), type=int, 
+                                                help='The number of CPUs to use (1–5 is generally most efficient). Set to -1 to disable.')))
+
+        intcaster = lambda x: int(float(x))
+        def str_or_none(x): return None if x.lower() == "none" else x
+        
+        intcaster = int
+        str_or_none = str
+        def str_or_none(arg): return str(arg)
+#          \033[34mhttps://tinyurl.com/sstxampl\033[0m 
+        data_pkwargs = dict(
+        ref=dict(args=['--ref','-r'], kwargs=dict(required=True, metavar='<dir/refcode>', 
+            help="Path to the directory that contains the LD reference panel. You can download this reference data manually too with '{basecmd} downloadutil'. Current config relevant to this functionality (prstdatadir: {prstdatadir}, auto_download: {auto_download}).")),
+        target=dict(args=['--target','-t'], kwargs=dict(required=True, type=str_or_none, metavar='<bim-prefix>', help="Specify the bim file or its prefix of desired target dataset. The bim file should be in plink format. You can also set the target to 'none' in which case the variant set will not be filtered for variants present in the target set.")),
+        sst=dict(args=['--sst','-s'], kwargs=dict(required=True, metavar='<file>', help="The summary statistics file from which the model will be created. The file should contain columns: SNP, A1, A2, BETA or OR, P or SE information. At the moment, the file is assumed to be tab-seperated, if you like other formats please let devs know. Alternative column names can be specified with --colmap (more info below). SNP column should contain rsid's, but now these can be filled from See \033[34mhttps://tinyurl.com/sstxampl\033[0m for a sumstat example.")),
+        out=dict(args=['--out','-o'], kwargs=dict(required=True, metavar='<dir+prefix>', help="Output prefix for the results (variant weights). This should be a combination of the desired output dir + file prefix.")),
+        n_gwas=dict(args=['--n_gwas','-n'], kwargs=dict(required=False, type=intcaster, metavar='<num>', default=None, help="Sample size of the GWAS. Not required if sumstat has a 'N' column and overrules column data if specified.")),
+        chrom=dict(args=['--chrom'], kwargs=dict(required=False, type=str, metavar='<chroms>', default='all', help="Optional: Select specific chromosome to work with. You can specify a specific chromosome as e.g. \"--chrom 3\". All chromosomes are used by default.")),
+        colmap=dict(args=['--colmap'], kwargs=dict(type=str, metavar='<colnames>', default='{default_colmap}', help="Optional: Allows one to specify an alterative column name for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1,, (in that order). Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,,,\" (OR, N, FRQA1, are excluded in this example). When the command is run a quick this_column -> that_column conversion table will be shown. Additionaly prstools has many internal checks to make sure a good PRS will be generated! The original default colmap works with the PRS-CS standard sumstat formatting.")),
+        pred=dict(args=['--pred','-p'], kwargs=dict(required=False, metavar='<yes/no>', type=str, default='auto', help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. With the 'auto' option (which is the default) the tool tries to generate a prediction unless the --chrom option is set. Available options: (yes/no/auto)."))
+        )
+#         data_pkwargs = {}
+
         from textwrap import dedent
         doc = dedent(cls.__doc__)
         epilog = getattr(cls, '_get_cli_epilog', lambda: None)()
+        groups = dict(
+            general=dict(grpheader='General Options', pkwargs={**basic_pkwargs}),
+            data   =dict(grpheader='Data Arguments',  pkwargs=data_pkwargs),
+            model  =dict(grpheader='Model Arguments', pkwargs=retrieve_pkwargs(cls))
+        )
         spkwg = dict(
-            cmdname    = cls.__name__.lower(), #command name
-            clsname    = cls.__name__, #class name
-            description= doc,
-            help       = doc.split('\n')[0],
-            epilog     = epilog,
-            modulename = cls.__module__,
-            groups     = dict(
-                general=dict(
-                    grpheader='Options',
-                    pkwargs={**basic_pkwargs, **retrieve_pkwargs(cls.from_cli_params_and_run)})
-            ),
-            subtype    = 'PRSTCLI'
+            cmdname     = cls.__name__.lower(), #command name
+            clsname     = cls.__name__, #class name
+            description = doc, # order of desc and help good here, dont check again.
+            help        = doc.split('\n')[0],
+            epilog      = epilog,
+            modulename  = cls.__module__,
+            groups      = groups,
+            subtype     = 'PRSTCLI'
         )
         
-
-        modelgeneral_group = model_parser.add_argument_group('General Options')
-        modelgeneral_group.add_argument('-h', '--help', action='help', help='Show this help message and exit.') #default=argparse.SUPPRESS
-        modelgeneral_group.add_argument('--cpus', '-c', **prc(dict(metavar='<number-of-cpus>', default=get_default_cpus(), type=int, 
-                    help='The number of CPUs to use (1–5 is generally most efficient). Set to -1 to disable.')))
-
-        # Add data related kwargs:
-        data_group = model_parser.add_argument_group('Data Arguments (first 5 required)')
-        data_group.add_argument("--ref","-r", 
-                **prc(dict(required=True, metavar='<dir/refcode>', 
-                    help="Path to the directory that contains the LD reference panel. You can download this reference data "
-                           "manually too with \'{basecmd} downloadutil\'. "
-                           "Current config relevant to this functionality (prstdatadir: {prstdatadir}, auto_download: {auto_download}).")))
-        data_group.add_argument("--target", "-t", 
-                **prc(dict(required=True, metavar='<bim-prefix>',
-                    help="Specify the bim file or its prefix of desired target dataset. The bim file should be in plink format.")))
-        data_group.add_argument("--sst","-s", **prc(dict(required=True, metavar='<file>', 
-        help="The summary statistics file from which the model will be created. The file should contain columns: SNP, A1, A2, BETA or OR, P or SE information. "
-              "At the moment, the file is assumed to be tab-seperated, if you like other formats please let devs know. "
-             f"Alternative column names can be specified with --colmap (more info below). SNP column should contain rsid\'s. "
-             f"See {format_color('https://tinyurl.com/sstxampl','34')} for an example.")))
-        data_group.add_argument("--out","-o", 
-                **prc(dict(required=True, metavar='<dir+prefix>', 
-                    help="Output prefix for the results (variant weights). This should be a combination of the desired output dir + file prefix.")))
-        data_group.add_argument("--n_gwas","-n",
-                **prc(dict(required=False, type=int, metavar='<num>', default=None,
-                    help="Sample size of the GWAS. Not required if sumstat has a 'N' column and overrules column data if specified.")))
-        data_group.add_argument("--chrom", #lambda x: x.split(',')
-                **prc(dict(required=False,type=str, metavar='<chroms>', default='all', 
-                    help="Optional: Select specific chromosome to work with. You can specify a specific chromosome as e.g. \"--chrom 3\". All chromosomes are used by default.")))
-        data_group.add_argument("--colmap", #lambda x: x.split(',')
-                **prc(dict(type=str, metavar='<colnames>', default='{defaultcolmap}',# Allows one to specify an alterative column name for columns SNP,A1,A2,BETA,OR,P,SE,N (in that order). "
-                    help="Optional: Allows one to specify an alterative column name for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1 (in that order). "
-                                "Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,\" (OR, N & FRQA1 are excluded in this example). "
-                                "When the command is run a quick this_column -> that_column conversion table will be shown. "
-                                "Additionaly prstools has many internal checks to make sure a good PRS will be generated! The original default colmap works with "
-                                "the PRS-CS standard sumstat formatting.")))
-        data_group.add_argument("--pred", "-p", 
-                **prc(dict(required=False,metavar='<yes/no>',type=str, default='yes',
-                                help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset (yes/no).")))
-
-        
-        
-#         # Add data related kwargs:
-#         data_group = model_parser.add_argument_group('Data Arguments (first 5 required)')
-#         data_group.add_argument("--ref","--ref_dir","-r", 
-#                 **prc(dict(required=True, metavar='<dir/refcode>', 
-#                     help="Path to the directory that contains the LD reference panel. You can download this reference data "
-#                            f"manually with \'{basecmd} downloadref\'. Soon it will be possible to automatically download it on the fly.")))
-#         data_group.add_argument("--target", "--bim_prefix", "-t", 
-#                 **prc(dict(required=True, metavar='<bim-prefix>', 
-#                     help="Specify the directory and prefix of the bim file for the target dataset.")))
-#         data_group.add_argument("--sst","--sst_file","-s", **prc(dict(required=True, metavar='<file>', 
-#                     help="The summary statistics file from which the model will be created. The file should contain columns SNP, A1, A2, P and BETA or OR (in this order)."
-#                          f" SNP should contain rsid\'s. See {format_color('https://tinyurl.com/sstxampl','34')} for an example.")))
-#         data_group.add_argument("--n_gwas","-n", 
-#                 **prc(dict(required=True, type=int, metavar='<num>', 
-#                     help="Sample size of the GWAS")))
-#         data_group.add_argument("--out","--out_dir","-o", 
-#                 **prc(dict(required=True, metavar='<dir>', 
-#                     help="Output prefix for the results (variant weights). This should be a combination of the desired output dir and file prefix.")))
-#         data_group.add_argument("--chrom", 
-#                     type=lambda x: x.split(','), metavar='<chroms>', default=range(1, 23), 
-#                     help="Optional: Chromosomes to include. You can specify multiple by using a separting comma e.g. \"--chrom 1,2,3\".")
-
+#         @classmethod, ignore comment
+#         def _get_cli_spkwg(cls, basic_pkwargs=True): ## This badboi wraps the super method to enhance it.
+#             nargskeys = ['input','selectcols','sortcols','assertunique','antiglobs']
+#             reqkeys = ['input','out']
+#             spkwg = super()._get_cli_spkwg(basic_pkwargs=basic_pkwargs)
+#             for key in nargskeys: spkwg['groups']['general']['pkwargs'][key]['kwargs'].update(nargs='+')
+#             for key in reqkeys: spkwg['groups']['general']['pkwargs'][key]['kwargs'].update(required=True)
+#             return spkwg
+ 
         return spkwg
+
     
     @classmethod
     def from_params(cls, groupby=False, **kwg):
@@ -275,7 +171,8 @@ class BasePred(ABC):
     @classmethod
     def from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
                                 verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, pred='auto', command=None, **kwargs):
-        from prstools.linkage import RefLinkageData
+        try: from prstools.linkage import AutoLinkageData
+        except: from prstools.linkage import RefLinkageData as AutoLinkageData
         
         # Initialize model object(s) (multiple since hyperparam ranges, and maybe chroms):
         if pkwargs is None: pkwargs = cls._get_pkwargs_for_class(cls)
@@ -290,11 +187,11 @@ class BasePred(ABC):
         if out: out_fnfmt = model.create_output_fnfmt(**locals())
 
         # Initialize data objects, fit the model & predict:
-        linkdata = RefLinkageData.from_cli_params(ref=ref, target=target, sst=sst, 
+        linkdata = AutoLinkageData.from_cli_params(ref=ref, target=target, sst=sst, 
                         n_gwas=n_gwas, chrom=chrom, colmap=colmap, pop=pop, verbose=verbose)
         model.set_linkdata(linkdata)
         if fit: model.fit()
-        if out: model.save_weights(out_fnfmt, ftype=ftype) # Store fitting result
+        if out: model._save_results(out_fnfmt, out=out, ftype=ftype) # Store fitting result, most often this will be the weights.
         
         if pred == 'auto' and not hasattr(model, 'weights_df'): pred = 'no'
         if pred == 'auto' and chrom != 'all': pred='no'
@@ -305,13 +202,17 @@ class BasePred(ABC):
                 yhat = model.predict(bed); 
                 prst.io.save_prs(yhat, fn=out_fnfmt, verbose=verbose) # Store prediction result
             except Exception as e:
-                msg = (f"Could not generate prediction (e.g. plink file missing)"
+                msg = (f"Could not generate prediction (e.g. plink file missing)" 
                        f" so since --pred='auto' the prediction step will be skipped (target={target})")
                 if pred == 'auto': print(msg)
                 else: raise e
 
         if return_models: 
             return model
+    
+    def _save_results(self, fn, *, out, ftype):
+        res = self.save_weights(fn, ftype=ftype)
+        return res
     
     @staticmethod
     def basenaming(item):
@@ -471,9 +372,17 @@ class BasePred(ABC):
         weights_df = possiblysortedweights_df
         self.weights_df = weights_df.reset_index(drop=True) if reset_index else weights_df
         
-    def remove_linkdata(self):
+    def remove_cache(self):
+        if hasattr(self,'cache_dt'):
+            del self.cache_dt
+        
+    def remove_linkdata(self, clean_mem=True):
         self.linkdata.clear_linkage_allregions()
         del self._linkdata
+        for attr in ['_linkdata', 'cache_dt']:
+            try: delattr(self, attr)
+            except Exception: pass
+        if clean_mem: prst.utils.clear_memory(postsleep=1.)
         
     def clone(self):
         return self.__class__(**self.get_params())
@@ -560,7 +469,7 @@ class BasePred(ABC):
                     m += msksum*127
                     m /= (nsamp - msksum)
                     try:
-                        assert X.shape == X8.shape[0]
+                        assert X.shape == X8.shape
                         np.copyto(X, X8)
                     except: X = X8.astype(dtype)
                     for j in range(X.shape[1]): # <--- This one is faster!
@@ -794,11 +703,11 @@ class GroupByModel(BaseMulti, BasePred):
         pbar = self.get_pbar(iterator=range(tot_iters))
         contents = {key: item for key, item in linkdata.groupby(self.groupby, sort=True, skipempty=True)}
         del linkdata
-        self.remove_linkdata()
+        self.remove_linkdata() 
         
         #  tqdm(linkdata.groupby(self.groupby, sort=True, skipempty=True), total=22)
         # this loop in a multi processed way?
-        #prst.utils.get_ip().embed()
+        #prst.utils.get_ip().embed() 
         print(sys.argv)
         if 'testmulti' in ' '.join(sys.argv) or '/opt/conda/lib/python3.11/site-packages/ipykernel_launcher.py' in ' '.join(sys.argv):
             from prstools.utils import save_to_interactive; save_to_interactive(dict(loc_dt=locals()))
@@ -839,9 +748,12 @@ class GroupByModel(BaseMulti, BasePred):
         real_pbar = self.get_pbar(iterator=range(tot_iters), fakebar=fakebar, deamon=True) if self.pbar else False
         if self.pbar: # Do fakebar hacks to make everything work
             mgr = fakebar._mgr; fakebar._mgr=None
-        results = Parallel(n_jobs=self.n_jobs, max_nbytes=None)(
-            delayed(worker)(self.get_model_clone(), cur_linkdata, fakebar, grp)
-            for grp, cur_linkdata in contents.items())
+        with warnings.catch_warnings(): # Bit annoying this catch warning is needed... but it is, else freaky warnings for my users
+            warnings.filterwarnings("ignore", category=UserWarning,
+                message=r".*worker stopped while some jobs were given to the executor.*")
+            results = Parallel(n_jobs=self.n_jobs, timeout=1e12, max_nbytes=None, mmap_mode=None)(
+                delayed(worker)(self.get_model_clone(), cur_linkdata, fakebar, grp)
+                for grp, cur_linkdata in contents.items())
         if self.pbar: 
             real_pbar.close(); real_pbar=None
             prst.utils.clear_memory(); # Crucial line because gc.collect() inside, else things go wrong later.

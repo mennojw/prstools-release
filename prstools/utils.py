@@ -1,5 +1,5 @@
 #| export
-import os, json, time
+import os, json, time, shutil
 from prstools._ext_utils import *
 import prstools as prst
 import warnings, threading
@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 try:
     from fastcore.script import call_parse, Param
 except:
-    def Param(**kwg):
+    def Param(*args, **kwg):
         return None
 try: import IPython as ip
 except: pass
@@ -165,10 +165,17 @@ class FakeMultiprocPbar:
             self._mgr = None
 
 
-def get_pbar(iterator, ncols=200, colour='green', bar_format='{l_bar}{bar:70}{r_bar}',
-            mininterval=0.5, desc=None, fakebar=None, deamon=False, **kwg):
+def get_pbar(iterator, maxncols=200, colour='green', bar_format='{l_bar}{barstr}{r_bar}',
+            mininterval=0.5, desc=None, fakebar=None, barlen='auto', deamon=False, **kwg):
+    # Prep:
     assert not 'total' in kwg, 'Need to use iterator, cannot use total argument.'
     create_pbar = get_tqdm()
+    detcols = shutil.get_terminal_size((999, None)).columns
+    ncols = min(maxncols, detcols)
+    barlen = max(min(70, detcols-65), 10)
+    bar_format = bar_format.format_map(prst.utils.AutoDict(barstr=f'{{bar:{barlen}}}'))
+    
+    # Pbar creation:
     pbar = create_pbar(iterator, ncols=ncols, colour=colour,
           bar_format=bar_format,
           mininterval=mininterval, desc=desc, **kwg) 
@@ -182,6 +189,11 @@ def get_pbar(iterator, ncols=200, colour='green', bar_format='{l_bar}{bar:70}{r_
             if fakebar:
                 delta = (fakebar.n - pbar.n)
             else: delta = -1
+            gbs = prst.utils.get_memory_usage(show=False)
+            if gbs: 
+                peak = max(gbs, getattr(fakebar,'_peak', 0.0))
+                pbar.set_postfix({'RAM': f"{gbs:.2f}G",'Peak': f"{peak:.2f}G"}, refresh=False)
+                fakebar._peak = peak
             if delta > 0: pbar.update(delta)
             else: pbar.refresh()
         def monitor():
@@ -198,6 +210,7 @@ def get_pbar(iterator, ncols=200, colour='green', bar_format='{l_bar}{bar:70}{r_
             t.join(0.1)
             return pbar._reall_close(*args,**kwargs)
         pbar.close = altclose
+    
     return pbar
 
 def clear_pbars(verbose=True):
@@ -375,8 +388,8 @@ class AutoPRSTCLI(PRSTCLI):
         spkwg = dict(
             cmdname    = cls.__name__.lower(), #command name
             clsname    = cls.__name__, #class name
-            description= doc,
-            help       = doc.split('\n')[0],
+            description= doc, # Help and discription are in the right spot, naming is counter intuitive, save urself time and dont check 
+            help       = doc.split('\n')[0], # and dont check again.
             epilog     = epilog,
             modulename = cls.__module__,
             groups     = dict(
@@ -728,7 +741,8 @@ _transform_mode_helpmsg =  ("yooo Different modes for file handling. If 'strict'
 class Transform(AutoPRSTCLI): #, AutoPRSTSubparser):
     
     '''\
-    Transform messy sumstats and other inputs into neat standardized formats.
+    Transform messy sumstats and other inputs into neat standardized formats
+    It can process whole directories at a time, using stars (--sst sst-prefix_*.tsv)
     '''
     
     _this_msg = 'yoyoyoy lololo ergergerg'
@@ -868,5 +882,5 @@ if not '__file__' in locals():
         print('Written to:', loadrf.name)
         if 'In' in locals() and _isdevenv_prstools:
             print('starting here in models:') 
-            get_ipython().system('prst --dev | head -3')
+            get_ipython().system('prst --dev-secret | head -3')
             

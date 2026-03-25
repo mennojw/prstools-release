@@ -581,7 +581,9 @@ class BaseLinkageData():
     # Checking, Validation & Assertion & Admin
     
     def clone(self):
-        return self.__class__(**self.get_params())
+        obj = self.__class__(**self.get_params())
+        obj = self._add_attr_to(obj)
+        return obj 
     
     def get_params(self):
         out=copy.deepcopy(self._kwg_dt); out.pop('_excl_lst',None)
@@ -608,6 +610,15 @@ class BaseLinkageData():
         
     def get_i_list(self):
         return list(self.reg_dt.keys())
+    
+    def _add_attr_to(self, new_obj):
+        for k, v in self.__dict__.items():
+            if hasattr(self, '_copy_attrs'):
+                if k in self._copy_attrs:
+                    setattr(new_obj, k, v)
+            elif not k == '_kwg_dt':
+                setattr(new_obj, k, v)
+        return new_obj
 
     ###########################
     ## Init,Save,Load: ########       
@@ -720,15 +731,21 @@ class BaseLinkageData():
                 if self.verbose: print(f'saving: fn={curfullfn} key={key}'+' '*50,end='\r')
         geno_dt['store_dt'] = store_dt
         
-    def save_prscsfmt(self, *, dn, cohort, pop, overwrite=True, allow_multi=False, verbose=None):
+    def save_prscsfmt(self, *, out_dn=None, base_dn=None, cohort='ref', pop='adj', overwrite=True, allow_multi=False, verbose=None):
         if verbose is None: verbose = self.verbose
-        assert os.path.exists(dn), f'Dir {dn} does not exist.'
+        print(out_dn)
+        assert (out_dn is not None) ^ (base_dn is not None), 'Need to supply out_dn OR base_dn'
+        if out_dn is not None: out_dn = os.path.normpath(out_dn)
+        base_dn = os.path.dirname(out_dn) if base_dn is None else base_dn
+        if base_dn == '': base_dn = './'
+        assert os.path.exists(base_dn), f'Dir {base_dn} does not exist. You should create it.'
         assert overwrite, 'only allowed with overwrite=True'
-        print('inputs:',cohort,pop)
+        #print('inputs:',cohort,pop)
         join = os.path.join; split=os.path.split
-        fnfmt0 = join(dn,'ldblk_{cohort}_{pop}/ldblk_{cohort}_chr{chrom}.hdf5')
-        fnfmt1 = join(dn,'ldblk_{cohort}_{pop}/snpinfo_{cohort}_hm3')
-        fnfmt2 = join(dn,'ldblk_{cohort}_{pop}/snpextinfo_{cohort}_{pop}_hm3.tsv')
+        ref_bn = 'ldblk_{cohort}_{pop}' if out_dn is None else os.path.basename(out_dn)
+        fnfmt0 = join(base_dn,ref_bn+'/ldblk_{cohort}_chr{chrom}.hdf5')
+        fnfmt1 = join(base_dn,ref_bn+'/snpinfo_{cohort}_hm3')
+        fnfmt2 = join(base_dn,ref_bn+'/snpextinfo_{cohort}_{pop}_hm3.tsv')
         # fnfmt = './ldblk_1kg_chr{chrom}.hdf5'
         ## A check check:
         if not allow_multi:
@@ -751,7 +768,7 @@ class BaseLinkageData():
             self.file_dt[chrom] = h5py.File(fn, 'w')
             return self.file_dt[chrom]
         blkcnt_dt = defaultdict(lambda:1)
-        for i, geno_dt in tqdm(list(self.reg_dt.items())):
+        for i, geno_dt in prst.utils.get_pbar(list(self.reg_dt.items()), colour='yellow'):
             if not 'chrom' in geno_dt:
                 clst = geno_dt['sst_df']['chrom'].unique()
                 assert len(clst) == 1
@@ -859,6 +876,9 @@ class BaseLinkageData():
         def retrieve_sumstats_region(self, *, i):
             geno_dt = self.reg_dt[i] 
             sst_df  = geno_dt['sst_df']
+            if not 'std_ref' in sst_df:
+                maf = sst_df['maf_ref']
+                sst_df['std_ref'] = np.sqrt(2.0*maf*(1.0-maf))
             if 'beta_mrg' in geno_dt.keys():
                 return None # Sumstat present so no need to compute anything.
             elif 'beta_mrg' in sst_df.columns:
@@ -1002,6 +1022,11 @@ class BaseLinkageData():
             for i, geno_dt in self.reg_dt.items():
                 sst_df = geno_dt['sst_df']
                 sst_df_lst.append(sst_df)
+            if len(sst_df_lst) == 0:
+                msg = ('The (matched) reference is completely empty (i.e. not a single snp). This could mean an empty '
+                       'reference or no overlaping variants between inputs (e.g. target-bim, sumstat & LD reference) or '
+                      'forinstance that --chrom 3 was selected, but that chromosome 3 is not in the reference.')
+                raise RuntimeError(msg)
             sst_df = pd.concat(sst_df_lst, axis=0)
             return sst_df
 
@@ -1170,11 +1195,12 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         if not os.path.isfile(reg_fn): cls._save_snpregister(ref=ref, reg_bn=reg_bn, verbose=verbose)
         lst=glob.glob(os.path.join(ref,'snpextinfo*'))
         if len(lst)>0:
-            assert len(lst) == 1, f"Only put 1 snpextinfo file in {ref}. Found {len(lst)} : {lst}"        
-            ext_df = prst.io.load_sst(lst[0], n_gwas=None, calc_beta_mrg=False, nrows=5)
-            tst_df = prst.io.load_sst(reg_fn, n_gwas=None, calc_beta_mrg=False, nrows=5)
-            if not all(col in tst_df for col in ext_df.columns):
-                cls._save_snpregister(ref=ref, reg_bn=reg_bn, verbose=verbose)
+            assert len(lst) == 1, f"Only put 1 snpextinfo file in {ref}. Found {len(lst)} : {lst}"
+            ## Not actually doing this bit just yet:
+#             ext_df = prst.io.load_sst(lst[0], n_gwas=None, calc_beta_mrg=False, nrows=5, check=False, verbose=False)
+#             tst_df = prst.io.load_sst(reg_fn, n_gwas=None, calc_beta_mrg=False, nrows=5, check=False, verbose=False)
+#             if not all(col in tst_df for col in ext_df.columns):
+#                 cls._save_snpregister(ref=ref, reg_bn=reg_bn, verbose=verbose)
 
         ref_df = prst.io.load_ref(reg_fn, chrom=chrom, verbose=verbose) ## <--- here the magic for chrom slicing takes place..
         if not 'check' in kwg: kwg['check']=False
@@ -1215,11 +1241,11 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         # Loading:
         orisst_df = prst.load_sst(sst, calc_beta_mrg=True, n_gwas=n_gwas, colmap=colmap, verbose=verbose, cli=cli)
         target_df, _ = prst.load_bimfam(target, fam=False, chrom=chrom, start_string = 'Loading target file.    ', verbose=verbose) if target else (None,None)
-        linkdata = cls.from_ref(ref, chrom=chrom, verbose=verbose, **kwg)
+        linkdata = cls.from_ref(ref, chrom=chrom, verbose=verbose, sst_df=orisst_df, **kwg)
         ref_df   = linkdata.get_sumstats_cur()
         msg = (f'\033[1;31mWARNING: The size of the reference (={ref_df.shape[0]} snps) is much smaller than the sumstat (={orisst_df.shape[0]} snps). '
-               'Are you sure you are using the right reference and not the example?\033[0m')
-        if ref_df.shape[0] < 1e4 and orisst_df.shape[0] > 1e5: warnings.warn(msg)
+               'Are you sure you are using the right reference and not the reference example?\033[0m')
+        if ref_df.shape[0] < 1e4 and orisst_df.shape[0] > 1e5: warnings.warn(msg) 
         orisst_df.rename(columns=sstrename_dt, inplace=True)
 
         # Matching:
@@ -1230,9 +1256,9 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         sst_df = prst.merge_snps(sst_df, target_df, flipcols=[], handle_missing='filter', extradropdupcols=ddups, warndupcol=True) if target else sst_df
         n_match = sst_df.shape[0]
         msg = (f'-> {n_match:,} common variants after matching ' +
-                          f'reference ({(n_match/ref_df.shape[0])*100:.1f}% incl.), ' +
-                          (f'target ({(n_match/target_df.shape[0])*100:.1f}% incl.) and ' if target else 'and ') +
-                          f'sumstat ({(n_match/orisst_df.shape[0])*100:.1f}% incl.).')
+                          f'reference ({(n_match/max(ref_df.shape[0],1))*100:.1f}% incl.), ' +
+                          (f'target ({(n_match/max(target_df.shape[0],1))*100:.1f}% incl.) and ' if target else 'and ') +
+                           f'sumstat ({(n_match/max(orisst_df.shape[0],1))*100:.1f}% incl.).')
         if verbose: print(msg)
          # generate spacing between loading and fit()
         if verbose and hasattr(orisst_df, 'msg') and cli and type(orisst_df.msg) is str: print(orisst_df.msg, '\n')
@@ -1300,9 +1326,6 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
     def groupby(self, by=None, sort=True, warndupcol=True, skipempty=True, needmerge=None):
         assert skipempty, 'Only option is to skip the empty groupbys for now.'
         import time, itertools
-#         sst_df = self.get_sumstats_cur()
-#         for key, item in sst_df.groupby(by, sort=sort):
-#             True
         sst_df = self.get_sumstats_cur()
         groupings = list(sst_df.groupby(by, sort=sort))
         sst_df=[]
@@ -1316,12 +1339,6 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
                 nlink = self.xs(keys, on='i')
             if len(nlink.get_i_list()) > 0: yield grp, nlink
             else: warnings.warn(f'Grouping by {by} specifically for {by}={grp} led to an empty LD + sumstat (i.e. not data), so skipping {by}={grp}')
-                
-#         import time
-#         for grp, cdf in self.get_sumstats_cur().groupby(by, sort=sort):
-#             nlink = self.merge(cdf.reset_index(), warndupcol=warndupcol, dropalldupcols=True, inplace=False)
-#             if len(nlink.get_i_list()) > 0: yield grp, nlink
-#             else: warnings.warn(f'Grouping by {by} specifically for {by}={grp} led to an empty LD + sumstat (i.e. not data), so skipping {by}={grp}')
 
     
 class SparseLinkageData(BaseLinkageData):
