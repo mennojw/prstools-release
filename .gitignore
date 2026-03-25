@@ -2,6 +2,7 @@
 .DS_Store
 linkdata.h5
 example*
+._exampl*
 .vscode
 archiv/
 
