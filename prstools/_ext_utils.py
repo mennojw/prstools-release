@@ -345,7 +345,11 @@ def get_ip():
 def get_memory_usage(show=True, prefix=''):
     # Checking for Open File Handles !!! 4 prst reflinkagedata issues
     #https://medium.com/brexeng/debugging-and-preventing-memory-errors-in-python-e00be55e7cf2
-    import psutil, os #, gc, time
+    try:
+        import psutil #, gc, time
+    except:
+        if show: print('Cannot give mem-usage, psutil not installed/working')
+        return -1
     process = psutil.Process(os.getpid())
     mem_info = process.memory_info()
     gbs=mem_info.rss / (1024 ** 3) # Convert to GBs
