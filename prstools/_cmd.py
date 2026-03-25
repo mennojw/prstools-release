@@ -1,4 +1,5 @@
 import os, time, sys, argparse, json
+from prstools import __version__, _date# as version, date
 # import gc,tracemalloc,objgraph,psutil
 
 def get_default_cpus():
@@ -169,7 +170,7 @@ def get_config(reload=False):
         _prstcfg = load_config() 
     return _prstcfg
 
-def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk Score creation. \n\'prst\' is a commandline shorthand for \'prstools\'",
+def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk Score creation [v{v}]. \n\'prst\' is a commandline shorthand for \'prstools\'",
                subparserkwg_lst=None, basecmd='prstools', return_spkwg=False, reload=False):
     
     # Prepare parsing params:
@@ -182,12 +183,12 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
         from prstools.utils import process_subparserkwgs
         subparserkwg_lst=process_subparserkwgs(subparserkwg_lst)
         # subparserkwg_lst contains the information to construct parsers
-        # This is generated from model code by the developer and saved
+        # This is generated from model code by the developer and savedx
     prstcfg = get_config()
         
     # Construct Parser:
     parser = CustomArgumentParser(
-        description=description,
+        description=description.format(v=__version__),  #,f'PRSTOOLS: '+description+f'(v{__version__})',
         argument_default=argparse.SUPPRESS,
         add_help=False,
         formatter_class=CustomFormatter
@@ -285,7 +286,6 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             func = retrieve_classmethod(clsname=spkwg['clsname'], methodname='from_cli_params_and_run')
             model_parser.set_defaults(func=func, pkwargs=spkwg['pkwargs'], model_parser=model_parser)
         elif spkwg['subtype'] == 'PRSTCLI':
-            print(spkwg['subtype'], spkwg['cmdname'])
             subcmd_parser = subparser.add_parser(spkwg['cmdname'], help=spkwg['help'],
                                     description=spkwg['description'],
                                     epilog=spkwg['epilog'],
@@ -319,7 +319,6 @@ def main(argv=None):
     if argv is None: argv=sys.argv[1:]
     args = parse_args(argv)
     display_info = True if 'pkwargs' in args else False
-    from prstools import __version__, _date# as version, date
     timestampfmt = "%a, %d %b %Y %H:%M:%S %z"
     if display_info:
         param_dt = vars(args)
