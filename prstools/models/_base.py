@@ -308,7 +308,7 @@ class BasePred(ABC):
         fin_df = self.get_weights()[selcols]
         #if ftype.endswith('prstweights.h5'): to_file=pd.DataFrame(fin_df.to_numpy(), index=fin_df.index, columns=fin_df.columns).to_hdf; kwg=dict(key='df')
         if ftype.endswith('prstweights.h5'): to_file=fin_df.astype(object).infer_objects().to_hdf; kwg=dict(key='df')
-        elif ftype.endswith('prstweights.parquet'): to_file=fin_df.to_parquet
+        elif ftype.endswith('prstweights.parquet'): to_file=fin_df.to_parquet; kwg={}
         else: to_file=fin_df.to_csv; kwg=dict(sep='\t', index=False, header=header)
         prst.io._pd_to_atomizer(fn=fn, to_file=to_file, **kwg)
         #os.replace(tmp_fn, fn) # atomically move into place
@@ -882,7 +882,7 @@ class MultiPRS(BaseMulti, BasePred, PRSTCLI):
             ref='1kg_hm3',
             fnfmt='.{ftype}',
             prs_ftype='prstprs.tsv',
-            weights_ftype='prstweights.h5',
+            weights_ftype='prstweights.parquet',
             return_models=True,
             pkwargs=None,
             verbose=True,            
@@ -962,7 +962,12 @@ class MultiPRS(BaseMulti, BasePred, PRSTCLI):
         
         # Combine the weights into one frame:    
         model = cls.from_dict(weights_dt, **modelkwg, ref_df=ref_df)
-        if len(weights_dt) > 1: model._save_results(out_fnfmt, out=out, ftype=weights_ftype)
+        
+        if len(weights_dt) > 1: 
+            if prst.io.get_pyarrowinstalled_bool():
+                model._save_results(out_fnfmt, out=out, ftype=weights_ftype)
+            else: 
+                if verbose: print('Skipping multi-weights saving since pyarrow is not installed\n')
         elif verbose: print("Not re-saving weights since there was only 1 input weight.\n")
         
         if pred and pred != 'no': # Prediction

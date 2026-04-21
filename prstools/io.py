@@ -432,12 +432,19 @@ def get_meta_analysis(*dfs, stuff=True):
     meta_df = 0
     return meta_df
 
+def get_pyarrowinstalled_bool():
+    try:
+        import pyarrow as pyarrowpack 
+        return True
+    except:
+        return False
+
 def get_pyarrow_prw(delimiter=None, pyarrow=True):
     if pyarrow:
         try: import pyarrow as pyarrowpack # Prevent var overloading
         except: 
             msg = 'It seems \'pyarrow\' is not installed, which means you are missing out on a' + \
-                ' lot of speed. Consider installing it using \'pip install pyarrow\' for super fast data loading.'
+                ' lot of speed. Consider installing it using \'pip install pyarrow --prefer-binary\' for super fast data loading.'
             warnings.warn(msg)
             pyarrow = False
         if delimiter == r'\s+': pyarrow=False
