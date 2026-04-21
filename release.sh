@@ -22,6 +22,7 @@ TODAY=$(date +%d-%m-%Y)
 sed -i '' "s/^_date = .*/_date = \"$TODAY\"/" prstools/__init__.py
 
 cd "$ORIG_DIR"
+pip install -e ./ # Important, else it might grab anotherin install
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
 cd ./prstools  # ok the order of all this seems funny, but im not gonna change it for now
 python ./_cmd.py --dev-secret # !!!ahh yess, to not have all the alpha code references. 
