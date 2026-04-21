@@ -198,6 +198,7 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
     
     if return_spkwg: return subparserkwg_lst
     def str_or_none(x): return None if x.lower() == "none" else x
+    def intcaster(x): return int(float(x))
     def prscsx_linkfun(**kwg): from prstools.PRScsx.PRScsx import main; sys.argv = sys.argv[1:]; main()
     def prscs_linkfun(**kwg): from prstools.PRScs.PRScs import main; sys.argv = sys.argv[1:]; main()        
     xtr = dict(subtype='external')
@@ -237,7 +238,6 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                         help='The number of CPUs to use (1–5 is generally most efficient). Set to -1 to disable.')))
             
             # Add data related kwargs:
-            intcaster = lambda x: int(float(x))
             data_group = model_parser.add_argument_group('Data Arguments (first 5 required)')
             data_group.add_argument("--ref","-r", 
                     **prc(dict(required=True, metavar='<dir/refcode>', 
@@ -284,7 +284,7 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             # and a snappy cmdline tool, which is nice for users. In case the model is PRSCS2 it in effect says:
             # ..  .set_defaults(func=PRSCS2.run_from_cli_params_thiswholenamecouldchange_imasocalledclassmethod, .. etc
             func = retrieve_classmethod(clsname=spkwg['clsname'], methodname='from_cli_params_and_run')
-            model_parser.set_defaults(func=func, pkwargs=spkwg['pkwargs'], model_parser=model_parser)
+            model_parser.set_defaults(func=func, pkwargs=spkwg['pkwargs'], the_parser=model_parser)
         elif spkwg['subtype'] == 'PRSTCLI':
             subcmd_parser = subparser.add_parser(spkwg['cmdname'], help=spkwg['help'],
                                     description=spkwg['description'],
@@ -294,14 +294,17 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                                     add_help=False)
             
             # Add groups and respective arguments:
+            pkwargscum = {}
             for grpname, grpkwg in spkwg['groups'].items():
                 cur_group = subcmd_parser.add_argument_group(grpkwg['grpheader'])
                 for argname, item in grpkwg['pkwargs'].items():
+                    ##### hmmmm, need to do a cum here?
+                    pkwargscum.update(grpkwg['pkwargs'])
                     cur_group.add_argument(*item['args'], **process_argkwargs(item['kwargs']))
             
             # Set func to be linked to all the args:
             func = retrieve_classmethod(modulename=spkwg['modulename'], clsname=spkwg['clsname'], methodname='from_cli_params_and_run')
-            subcmd_parser.set_defaults(func=func) # Yes it needs to b
+            subcmd_parser.set_defaults(func=func, pkwargs=grpkwg['pkwargs'], the_parser=subcmd_parser, display_info=spkwg.get('display_info',True)) # Yes it needs to b
         else:
             raise Exception('Subparser subtype not recognized, Contact dev.')
     
@@ -318,8 +321,15 @@ def main(argv=None):
     
     if argv is None: argv=sys.argv[1:]
     args = parse_args(argv)
-    display_info = True if 'pkwargs' in args else False
+    args_dt = vars(args)
+    if 'display_info' in args_dt:
+        display_info = args_dt['display_info']
+    else:
+        display_info = True
+    #display_info = True if 'pkwargs' in args else False ## This is not based on pkwargs prescence but perhaps this should be set instead...
+    # since all commands now have it...
     timestampfmt = "%a, %d %b %Y %H:%M:%S %z"
+
     if display_info:
         param_dt = vars(args)
         topstr = '\n'.join([
@@ -328,7 +338,7 @@ def main(argv=None):
             f'Options in effect:'
         ])
         print(topstr)
-        for act in  args.model_parser._actions:
+        for act in args.the_parser._actions:
             key = act.dest
             if not key in param_dt: continue
             item = param_dt[key]
@@ -339,10 +349,10 @@ def main(argv=None):
             print('  --%s %s' % (key, pitem))
         print()
     else: print(f'PRSTOOLS v{__version__} ({_date})')
-
-    args_dt = vars(args)
-    # Need to happen here because it needs to happen before numpy/scipy is imported: 
-    #**{key:item for key, item in args_dt.items() if key=='cpus'}if 'cpus' in args_dt: 
+    
+    
+    # Need to happen here because it needs to happen before numpy/scipy is imported:  
+    #**{key:item for key, item in args_dt.items() if key=='cpus'}if 'cpus' in args_dt:  
     cpus = args_dt.get('cpus', get_default_cpus())
     cpu_display_string = set_cpu_envvars(cpus, output_string=True)
 
@@ -381,7 +391,7 @@ def main(argv=None):
         displaynjobs,
         f'Number of cpus:    {cpu_display_string}',
         f' '] if elem)
-        print(envstr)
+        print(envstr, flush=True)
     ''
     # Run the actual task:
     args_dt['return_models'] = False

@@ -19,10 +19,17 @@ def optional_import(path, name=None, default=None):
     except ImportError:
         return default
     
-from prstools._cmd import load_config, save_config, remove_config
+# from prstools._cmd import load_config, save_config, remove_config
 _devonlymsg =  "If you see this message something went wrong in an unexpected way. Please contact the developer."
 
-def plot_manhattan(data_df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323, palette='bright', aspect=4, s=6., **snskwg):
+def load_config(*a, **kw):
+    from prstools._cmd import load_config as _f; return _f(*a, **kw)
+def save_config(*a, **kw):
+    from prstools._cmd import save_config as _f; return _f(*a, **kw)
+def remove_config(*a, **kw):
+    from prstools._cmd import remove_config as _f; return _f(*a, **kw)
+
+def plot_manhattan(data_df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323, palette='bright', aspect=4, s=6.,title='Manhattan plot', **snskwg):
     import pandas as pd
     import numpy as np
     import seaborn as sns
@@ -37,88 +44,192 @@ def plot_manhattan(data_df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323, p
     plot = sns.relplot(data=data_df, x=x, y=y, aspect=aspect, hue=regcol, palette=palette, legend=None, s=s, **snskwg)
     chrom_df=data_df.groupby(regcol)[x].median()
     plot.ax.set_xlabel(regcol); plot.ax.set_xticks(chrom_df); plot.ax.set_xticklabels(chrom_df.index)
-    plot.fig.suptitle('Manhattan plot')
+    plot.fig.suptitle(title)
     plt.show()
     
 manhattan_plot = plot_manhattan
-    
+
+
 def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, **kwg):
-    assert handle_prstdatadir in ('only','allow',False)
+    if not type(handle_prstdatadir) is list: handle_prstdatadir = [handle_prstdatadir for _ in range(len(kwg))]
+    else: len(handle_prstdatadir) == len(kwg), 'input paths for validation must match handle_prstdatadir list in length'
+    for chandle_prstdatadir in handle_prstdatadir: assert chandle_prstdatadir in ('only','allow',False) 
+    
     newargs=[]
     prstcfg = load_config()
-    for key, arg in kwg.items():
-        if not arg: 
-            newargs += [arg]; continue # Skipp and continue if None or False
-        assert type(arg) is str, 'Inputs must be strings to be validated as paths.'
+    links_df = _get_linksprst()
+    prstdatadir = prstcfg.get('prstdatadir', None)
+    auto_download = prstcfg['auto_download']
+    #if prstdatadir is not None: assert type(prstdatadir) is str, f'prstdatadir must be of type string! now it is: {type(prstdatadir)}'
+    
+    for chandle_prstdatadir, (key, arg) in zip(handle_prstdatadir, kwg.items()):
+        
+        if not arg: newargs += [arg]; continue # Skipp and continue if None or False
+        assert type(arg) is str, 'Inputs must be strings to be valid and be validated as paths.'
         arg = os.path.expanduser(arg)
-        if must_exist and (not os.path.exists(arg) or (handle_prstdatadir=='only')):
-            checked_prstdatadir=False
-            prstdatadir = prstcfg.get('prstdatadir', None)
-            msg = f'prstdatadir is not set, but required to retrieve "{arg}" from prstdatadir. Please set prstdatadir with prst config.'
-            if not prstdatadir and  (handle_prstdatadir=='only'): raise ValueError(msg)
-            if handle_prstdatadir and type(prstdatadir) is str and len(arg)>0 and (not arg[0] in '/.') and (arg.count('/') <= 2):
-                msg = f'\033[1;31mWARNING: It seems prstools data storage location (i.e. prstdatadir) does not exist (anylonger) @ {prstdatadir}\033[0m'
+        argexists = os.path.exists(arg)
+        do_prstdd = must_exist and (not argexists or (chandle_prstdatadir=='only')) and chandle_prstdatadir in ('allow','only')
+        
+        # prstdatadir part: see if it is in the pdd
+        if do_prstdd: # note: a lot of this determination of status_prstdatadir is not subsequently used.
+            msg = f'prstdatadir is not set, but required to retrieve "{arg}" from prstdatadir, for option {key}. Please set prstdatadir with "prst config".'
+            if not prstdatadir and (chandle_prstdatadir=='only'): raise ValueError(msg)
 
-                if not os.path.exists(prstdatadir): 
-                    warnings.warn(msg)
-                else:
-                    tstarg = os.path.join(prstdatadir, arg)
-                    prstargexists = os.path.exists(tstarg)
+            # Determine status_prstdatadir and potentially correct arg
+            is_prstdatadir_compliant = len(arg)>0 and (not arg[0] in '/.') and (arg.count('/') <= 2)
+            if prstdatadir and not os.path.exists(prstdatadir):
+                msg = (f'\033[1;31mWARNING: It seems prstools data storage location '
+                           f'(i.e. prstdatadir) does not exist (anylonger) @ {prstdatadir}\033[0m')
+                if not os.path.exists(prstdatadir): warnings.warn(msg)
+                status_prstdatadir = 'dirdisappeared'
+            elif prstdatadir and is_prstdatadir_compliant:
+                tstarg = os.path.join(prstdatadir, arg)
+                argexists = os.path.exists(tstarg)
+                if argexists: arg=tstarg
+                if key=='ref' and not argexists:
+                    tstarg = os.path.join(prstdatadir, 'ldblk_'+arg);
                     if os.path.exists(tstarg): arg=tstarg
-                    if key=='ref':
-                        tstarg = os.path.join(prstdatadir, 'ldblk_'+arg)
-                        if os.path.exists(tstarg): arg=tstarg
-                    checked_prstdatadir=True
-                if (not os.path.exists(arg) or (handle_prstdatadir=='only' and not prstargexists)) and prstcfg['auto_download']:
-                    links_df = _get_linksprst()
-                    #links_df = prst.utils._get_linksprst() 
-                    if key == 'ref':
-                        ind = links_df['filename'].str.startswith('ldblk_')
-                        links_df = links_df[ind].reset_index(drop=True)
-                    ind = links_df['filename'].str.replace('.tar.gz','') == arg
-                    ind = ind | (links_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','') == arg)
-                    if ind.sum() == 1:
-                        df = links_df[ind]
-                        print(f'The data for "{arg}" was not yet available in the prstools data directory, so it is downloaded now.')
-                        DownloadUtil.from_cli_params_and_run(destdir=prstcfg['prstdatadir'], pattern=arg)
-                        bn = df['filename'].str.replace('.tar.gz','').iloc[0]
-                        tstarg = os.path.join(prstdatadir, bn)
-                        assert os.path.exists(tstarg), (f'Although based on input "{arg}" a download was performed. '
-                            f'This did not result in a file or directory at {tstarg}. This should not happen and is a bug. please contact developer')
-                        arg = tstarg
-                    elif ind.sum() > 1:
-                        links_df['matching'] = ind
-                        msg = ''
-                        msg += f'Issue with input argument "--{key}"\n'
-                        msg += 'It was not present in prstools data dir, but perhaps it can be downloaded.\n'
-                        msg += 'However it did not match uniquely with the available data downloads:\n'
-                        msg += str(links_df[['filename','matching','description']]) + '\n'
-                        msg += 'It should match uniquely!\n\n'
-                        raise Exception(msg+f'"--{key}" should match uniquely for data download.')
-                    else:
-                        msg = ''
-                        msg += f'Argument "{arg}" for option "--{key}" was not found in prstools data dir, current dir or available in downloads.\n'
-                        msg += f'Have your argument for "--{key}" match one of these options:\n'
-                        disp_df = links_df[['filename','description']]
-                        disp_df.loc[:,'filename'] = disp_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','')
-                        msg += str(disp_df) + '\n'
-                        raise Exception(msg + f"-> So in the end could not find '{arg}'")
-                    
-            if not os.path.exists(arg):
-                if checked_prstdatadir: print(f'\n--> Also looked for \'{arg}\' in prstdatadir: {prstdatadir} <--\n')
-                try:
-                    open(arg) # this is to make it throw an error, because the file/dir does not exist. 
-                except Exception as e:
-                    msg = f'Could not find "{arg}" no such file or directory.'
-                    xtra = ', '.join([elem for elem in os.listdir(prstdatadir) if elem[:1] != '.']) if checked_prstdatadir else ''
-                    xtra = f'Looked in prstdatadir too.\nFor this the options are: {xtra}' if checked_prstdatadir else ''
-                    msg = msg + xtra
-                    raise FileNotFoundError(msg) from e
-            #import errno
-            #raise FileNotFoundError( errno.ENOENT, os.strerror(errno.ENOENT), arg)
-            #raise FileNotFoundError(f'No such file or directory: \'{arg}\'')
+                argexists = os.path.exists(arg)
+                status_prstdatadir= 'argexists' if argexists else 'argabsent'
+            elif prstdatadir: status_prstdatadir = 'argnoncompliant'
+            else: status_prstdatadir='notset'
+        
+        # links_df part: see if it can be downloaded, and download if possible
+        do_prstlink = do_prstdd and (not argexists and is_prstdatadir_compliant)
+        ind = links_df['filename'].str.replace('.tar.gz','') == arg
+        ind = ind | (links_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','') == arg)
+        if do_prstlink and ind.sum() == 1:
+            df = links_df[ind]
+            print(f'The data for "{arg}" was not yet available in the prstools data directory, but the data is downloadable.')
+            msg = (f'Requested {arg} is available for download, but your prstdatadir is not set or auto_download disabled so cannot download {arg}. ' 
+                    'You can manually download and set prstdatadir (using "prst config").')
+            if auto_download and prstdatadir: DownloadUtil.from_cli_params_and_run(destdir=prstcfg['prstdatadir'], pattern=arg)
+            else: raise RuntimeError(msg)
+            bn = df['filename'].str.replace('.tar.gz','').iloc[0]
+            tstarg = os.path.join(prstdatadir, bn)
+            assert os.path.exists(tstarg), (f'Although based on input "{arg}" a download was performed. '
+                f'This did not result in a file or directory at {tstarg}. This should not happen and is a bug. please contact developer')
+            arg = tstarg
+        elif do_prstlink and ind.sum() > 1:
+            links_df['matching'] = ind
+            msg = ''
+            msg += f'Issue with input argument "--{key}"\n'
+            msg += 'It was not present in prstools data dir, but perhaps it can be downloaded.\n'
+            msg += 'However it did not match uniquely with the available data downloads:\n'
+            msg += str(links_df[['filename','matching','description']]) + '\n'
+            msg += 'It should match uniquely!\n\n'
+            raise ValueError(msg+f'"--{key}" should match uniquely for data download.')
+        elif do_prstlink:
+            msg = f'Could not find "{arg}" no such file or directory. '
+            msg += f'Argument "{arg}" for option "--{key}" was not found in prstools data dir, current dir or available in downloads.\n'
+            msg += f'Have your argument for "--{key}" match a fitting option from the table above, or specify a path that exists.'
+            disp_df = links_df[['filename','description']]
+            disp_df.loc[:,'filename'] = disp_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','')
+            disp_df = disp_df.rename(columns=dict(filename=f'possible arguments for --{key}'))
+            msg = '\n' + str(disp_df) + '\nFileNotFoundError: ' + msg
+            raise FileNotFoundError(msg)
+            
+        if not os.path.exists(arg) and must_exist: # <- Ok so after handling it still does not exist, we will be throwing a custom error
+            msg = f'Could not find "{arg}" no such file or directory.' # you could make the messages a bit better
+            xtra_maybelater = '\nNote: the argument does start with . or / or has 2+ of slashes. ' if do_prstdd and not is_prstdatadir_compliant else ''
+            xtra=''; msg = msg + xtra
+            raise FileNotFoundError(msg)
         newargs += [arg]
+
     return newargs[0] if len(newargs) == 1 else tuple(newargs)
+    
+# def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, **kwg):
+#     assert handle_prstdatadir in ('only','allow',False)
+#     newargs=[]
+#     prstcfg = load_config()
+#     links_df = _get_linksprst()
+#     prstdatadir = prstcfg.get('prstdatadir', None)
+    
+#     for key, arg in kwg.items():
+        
+#         if not arg: newargs += [arg]; continue # Skipp and continue if None or False
+#         assert type(arg) is str, 'Inputs must be strings to be valid and be validated as paths.'
+#         arg = os.path.expanduser(arg)
+        
+#         if must_exist and (not os.path.exists(arg) or (handle_prstdatadir=='only')):
+            
+#             checked_prstdatadir=False
+            
+#             msg = f'prstdatadir is not set, but required to retrieve "{arg}" from prstdatadir. Please set prstdatadir with prst config.'
+#             if not prstdatadir and (handle_prstdatadir=='only'): raise ValueError(msg)
+                
+#             if handle_prstdatadir and type(prstdatadir) is str and len(arg)>0 and (not arg[0] in '/.') and (arg.count('/') <= 2):
+                
+#                 msg = f'\033[1;31mWARNING: It seems prstools data storage location (i.e. prstdatadir) does not exist (anylonger) @ {prstdatadir}\033[0m'
+#                 if not os.path.exists(prstdatadir):
+#                     warnings.warn(msg)
+#                 else:
+#                     tstarg = os.path.join(prstdatadir, arg)
+#                     prstargexists = os.path.exists(tstarg)
+#                     if os.path.exists(tstarg): arg=tstarg
+#                     if key=='ref':
+#                         tstarg = os.path.join(prstdatadir, 'ldblk_'+arg)
+#                         if os.path.exists(tstarg): arg=tstarg
+#                     checked_prstdatadir=True
+                    
+#                 if (not os.path.exists(arg) or (handle_prstdatadir in ('only','allow') and not prstargexists)):
+#                     #links_df = prst.utils._get_linksprst() 
+                    
+#                     # See if present in links_df
+#                     if key == 'ref':
+#                         ind = links_df['filename'].str.startswith('ldblk_')
+#                         links_df = links_df[ind].reset_index(drop=True)
+#                     ind = links_df['filename'].str.replace('.tar.gz','') == arg
+#                     ind = ind | (links_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','') == arg)
+                    
+#                     if ind.sum() == 1:
+#                         df = links_df[ind]
+#                         print(f'The data for "{arg}" was not yet available in the prstools data directory, so it is downloaded now.')
+#                         if prstcfg['auto_download']: DownloadUtil.from_cli_params_and_run(destdir=prstcfg['prstdatadir'], pattern=arg)
+#                         else: raise RuntimeError(f'auto_download disabled so cannot download {arg}')
+#                         bn = df['filename'].str.replace('.tar.gz','').iloc[0]
+#                         tstarg = os.path.join(prstdatadir, bn)
+#                         assert os.path.exists(tstarg), (f'Although based on input "{arg}" a download was performed. '
+#                             f'This did not result in a file or directory at {tstarg}. This should not happen and is a bug. please contact developer')
+#                         arg = tstarg
+#                     elif ind.sum() > 1:
+#                         links_df['matching'] = ind
+#                         msg = ''
+#                         msg += f'Issue with input argument "--{key}"\n'
+#                         msg += 'It was not present in prstools data dir, but perhaps it can be downloaded.\n'
+#                         msg += 'However it did not match uniquely with the available data downloads:\n'
+#                         msg += str(links_df[['filename','matching','description']]) + '\n'
+#                         msg += 'It should match uniquely!\n\n'
+#                         raise Exception(msg+f'"--{key}" should match uniquely for data download.')
+#                     else:
+#                         msg = ''
+#                         msg += f'Argument "{arg}" for option "--{key}" was not found in prstools data dir, current dir or available in downloads.\n'
+#                         msg += f'Have your argument for "--{key}" match one of these options:\n'
+#                         disp_df = links_df[['filename','description']]
+#                         disp_df.loc[:,'filename'] = disp_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','')
+#                         msg += str(disp_df) + '\n'
+#                         raise Exception(msg + f"-> So in the end could not find '{arg}'")
+                    
+#             if not os.path.exists(arg): # <- Ok so after handling it still does not exist, we will be throwing a custom error
+#                 if checked_prstdatadir: print(f'\n--> Also looked for \'{arg}\' in prstdatadir: {prstdatadir} <--\n')
+#                 notsetbuthere_prstdatadir = True 
+#                 if (handle_prstdatadir in ('only', 'allow') and prstdatadir is None) else False:
+                    
+#                 try:
+#                     open(arg) # this is to make it throw an error, because the file/dir does not exist. 
+#                 except Exception as e:
+#                     msg = f'Could not find "{arg}" no such file or directory.'
+#                     xtra = ', '.join([elem for elem in os.listdir(prstdatadir) if elem[:1] != '.']) if checked_prstdatadir else ''
+#                     xtra = f'Looked in prstdatadir too.\nFor this the options are: {xtra}' if checked_prstdatadir else ''
+#                     xtra += '' if denied_prstdatadir else ''
+#                     if 
+#                     msg = msg + xtra
+#                     raise FileNotFoundError(msg) from e
+#             #import errno
+#             #raise FileNotFoundError( errno.ENOENT, os.strerror(errno.ENOENT), arg)
+#             #raise FileNotFoundError(f'No such file or directory: \'{arg}\'')
+#         newargs += [arg]
+#     return newargs[0] if len(newargs) == 1 else tuple(newargs)
 
 def get_tqdm():
     try:
@@ -267,15 +378,21 @@ def store_argparse_dicts(subparserkwg_lst, show=False, sort_dicts=False, lst=Non
     from ._cmd import parse_args
     if not lst: lst = []
     import json
+    from textwrap import dedent, indent
     from pprint import PrettyPrinter
-    NoneType = type(None)
+#     NoneType = type(None)
     subparserkwg_lst = parse_args(argv=[], subparserkwg_lst=subparserkwg_lst, return_spkwg=True)
     lst.append(subparserkwg_lst)
     proc_dt = dict()
     def fun(obj):
+        special_notactuallytypes = ['intcaster', 'str_or_none']
         if type(obj) is type:
             proc_dt[repr(obj)] = obj.__name__
             return repr(obj)
+        elif obj.__name__ in special_notactuallytypes:
+#             proc_dt[obj.__name__] = obj.__name__
+            proc_dt[repr(obj)] = obj.__name__
+            return obj.__name__ #repr(obj)
         else:raise Exception('This is mjw prst code, it seems a particular argument cannot be transformed into a argparse dict')
     if store:
         string = json.dumps(subparserkwg_lst, default=fun, indent=2)
@@ -284,16 +401,25 @@ def store_argparse_dicts(subparserkwg_lst, show=False, sort_dicts=False, lst=Non
         stringproc = '\n'.join([' '*4 + elem for elem in stringproc.split('\n')]) # do pyhton indent
         for key, item in proc_dt.items():
             stringproc = stringproc.replace(key,item)
+        specstring = ''
+        specstring += 'NoneType = type(None)\n'
+        specstring += 'def str_or_none(x): return None if x.lower() == "none" else x\n'
+        specstring += 'def intcaster(x): return int(float(x))\n'
+        exec(specstring)
         test_lst = eval(stringproc)
-        assert test_lst == subparserkwg_lst
+#         try:
+#             assert test_lst == subparserkwg_lst
+#         except: get_ip().embed()
         finstring = ''
         finstring += '# Warning: Dont edit here, This file was generated automatically, using a developer tool.\n'
-        finstring += 'NoneType = type(None)\n'
         finstring += "def get_subparserkwg_lst():\n"
+        finstring += '\n'.join([4*' '+elem for elem in specstring.split('\n')]) + '\n'
         finstring += '    subparserkwg_lst = '+stringproc + '\n'
         finstring += "    return subparserkwg_lst"
-        with open('../prstools/_parser_vars.py', 'w') as f: 
-            f.write(finstring)
+        ns = {}; exec(finstring, ns)
+        lst = ns["get_subparserkwg_lst"]() # small code exe test
+        fn = '../prstools/_parser_vars.py'
+        with open(fn, 'w') as f: f.write(finstring)
         if show: print(finstring)
     return subparserkwg_lst
 
@@ -385,12 +511,14 @@ class AutoPRSTCLI(PRSTCLI):
         from textwrap import dedent
         doc = dedent(cls.__doc__)
         epilog = getattr(cls, '_get_cli_epilog', lambda: None)()
+        display_info = getattr(cls, '_display_info', False)
         spkwg = dict(
             cmdname    = cls.__name__.lower(), #command name
             clsname    = cls.__name__, #class name
             description= doc, # Help and discription are in the right spot, naming is counter intuitive, save urself time and dont check 
             help       = doc.split('\n')[0], # and dont check again.
             epilog     = epilog,
+            display_info = display_info,
             modulename = cls.__module__,
             groups     = dict(
                 general=dict(
@@ -505,13 +633,15 @@ def _get_linksprst():
     ["ldblk_1kg_eas.tar.gz",  "https://www.dropbox.com/s/7ek4lwwf2b7f749/ldblk_1kg_eas.tar.gz?dl=1", "1000G EAS Population LD panel (~4.33G)"],
     ["ldblk_1kg_eur.tar.gz",  "https://www.dropbox.com/s/mt6var0z96vb6fv/ldblk_1kg_eur.tar.gz?dl=1", "1000G EUR Population LD panel (~4.56G)"],
     ["ldblk_1kg_sas.tar.gz",  "https://www.dropbox.com/s/hsm0qwgyixswdcv/ldblk_1kg_sas.tar.gz?dl=1", "1000G SAS Population LD panel (~5.60G)"],
+    ["1kg_hm3.tar.gz",        "https://www.dropbox.com/scl/fi/0nn9za9wbg6n0ki3e6371/1kg_hm3.tar.gz?rlkey=7v1hqr4jnacvvfqv6jj13lcd2&st=yv4fcssd&dl=1",
+     "A 1kg plink dataset for hapmap3 snps with all pops (2.5K induv) (~348M)."],
     ["ldblk_ukbb_afr.tar.gz", "https://www.dropbox.com/s/dtccsidwlb6pbtv/ldblk_ukbb_afr.tar.gz?dl=1", "UKBB AFR Population LD panel (~4.93G)"],
     ["ldblk_ukbb_amr.tar.gz", "https://www.dropbox.com/s/y7ruj364buprkl6/ldblk_ukbb_amr.tar.gz?dl=1", "UKBB AMR Population LD panel (~4.10G)"],
     ["ldblk_ukbb_eas.tar.gz", "https://www.dropbox.com/s/fz0y3tb9kayw8oq/ldblk_ukbb_eas.tar.gz?dl=1", "UKBB EAS Population LD panel (~5.80G)"],
     ["ldblk_ukbb_eur.tar.gz", "https://www.dropbox.com/s/t9opx2ty6ucrpib/ldblk_ukbb_eur.tar.gz?dl=1", "UKBB EUR Population LD panel (~6.25G)"],
     ["ldblk_ukbb_sas.tar.gz", "https://www.dropbox.com/s/nto6gdajq8qfhh0/ldblk_ukbb_sas.tar.gz?dl=1", "UKBB SAS Population LD panel (~7.37G)"],
     ["example.tar.gz", "https://www.dropbox.com/scl/fi/yi6lpbp0uhqiepayixvtj/example.tar.gz?rlkey=kvd7r17wuory9ucqdk4rh55jw&dl=1", "PRSTOOLS Example data (3.8M)"],
-    ["g1000.tar.gz",'https://www.dropbox.com/scl/fi/97lsbtoomhti3q6x2wttf/g1000.tar.gz?rlkey=9hd85oytgnpv6wvbapvu2rk2m&st=3k4fq9ub&dl=1', "European 1kg plink dataset for hapmap3 (~64M)"]
+#     ["g1000.tar.gz",'https://www.dropbox.com/scl/fi/97lsbtoomhti3q6x2wttf/g1000.tar.gz?rlkey=9hd85oytgnpv6wvbapvu2rk2m&st=3k4fq9ub&dl=1', "European 1kg plink dataset for hapmap3 (~64M)"]
         #["example.tar.gz","https://www.dropbox.com/scl/fi/7fg6c9e5dnmb0n4cdfquz/example.tar.gz?rlkey=31u2948paz539uw61jq37oe8s&dl=1", "PRSTOOLS Example data (70mb)"] 
     ]
     columns = ["filename", "url", "description"]
@@ -650,7 +780,7 @@ class Combine(AutoPRSTCLI): #, AutoPRSTSubparser):
             verbose=True,
             #     # Following two are needed to not have the args.func(var(args)) not crash: 
             #     command=None,
-            #     func=None, 
+            #     func=None,  
             **kwg # this kwg catches command and func for a smooth run
             ):
         
@@ -736,8 +866,7 @@ class Combine(AutoPRSTCLI): #, AutoPRSTSubparser):
             
         return df
     
-_transform_mode_helpmsg =  ("yooo Different modes for file handling. If 'strict' is present an error in forinstance "
-        "the loading of a sumstat will lead to a stop. 'redo' will force redo if output exists (else it will skip). with --mode strictredo you will combine options.")
+
 class Transform(AutoPRSTCLI): #, AutoPRSTSubparser):
     
     '''\
@@ -746,6 +875,9 @@ class Transform(AutoPRSTCLI): #, AutoPRSTSubparser):
     '''
     
     _this_msg = 'yoyoyoy lololo ergergerg'
+    
+    _transform_mode_helpmsg =  ("yooo Different modes for file handling. If 'strict' is present an error in forinstance "
+        "the loading of a sumstat will lead to a stop. 'redo' will force redo if output exists (else it will skip). with --mode strictredo you will combine options.")
     
     @classmethod
     def _get_cli_spkwg(cls, basic_pkwargs=True): ## This badboi wraps the super method to enhance it.
@@ -765,19 +897,22 @@ class Transform(AutoPRSTCLI): #, AutoPRSTSubparser):
             mode:Param(_transform_mode_helpmsg, str)='strict',
             # jergjkerkj jkergjkhegrjk
             sep:str='\t', # Seperator for the inputs files, default is \t (tab).
+            n_eff_handling='raw',
             pyarrow=True,
             verbose=True,
             **kwg # this kwg catches command and func for a smooth run
             ):
         
         #dry:bool=False, # Specify to do a dry run to get an idea of what the command will do
-        if type(sst) is str:
-            fn_lst = glob.glob(sst)
-        elif type(sst) is list:
-            fn_lst = sst
-        else: error()
+        if type(sst) is str: fn_lst = [sst]
+        elif type(sst) is list: fn_lst = sst
+        else: ValueError(f'Input --sst is unrecognized type: {type(sst)}')
+        new_lst=[]
+        for fn in fn_lst:
+            if any(elem in fn for elem in ['*','[']): new_lst += glob.glob(fn)
+            else: new_lst += [fn]
+        fn_lst = new_lst
         if colmap == '{default_colmap}': colmap = prst.io._get_default_colmap()
-
         out_lst = []
         uniqfns  = np.unique(fn_lst)
         nuniqfns = len(uniqfns)
@@ -796,15 +931,16 @@ class Transform(AutoPRSTCLI): #, AutoPRSTSubparser):
         print(f'It will be generated from: {fn_lst[0]}\n')
         
         pbar = prst.utils.get_pbar(list(zip(fn_lst,out_lst)))
-        e=False; first = True
+        e=False; first = True; firstwarn=True
         for fn, out_fn in pbar:
             if verbose and first: print('\n'); first=False
             if not os.path.exists(out_fn) or 'redo' in mode:
-                msg = f"\033[1;31m  '.prst' string detected in input filename {fn}. Are you sure you are not accidentally using prstools-ready homogenized sumstats as inputs? \033[0m"
-                if '.prst' in fn: warnings.warn(msg)
+                inject = '(i.e. already ready for subsequent steps) Note: this warning is only shown for the first occurance.'
+                msg = f"\033[1;31m  '.prst' string detected in input filename {fn}. Are you sure you are not accidentally using prstools-ready homogenized sumstats as inputs? {inject}\033[0m"
+                if firstwarn and '.prst' in fn: warnings.warn(msg); firstwarn=False
                 try:
                     print(f'\nIt seems {os.path.basename(out_fn)} does not exist (or a redo was requested) so we are making it from {fn}')
-                    sst_df = prst.load_sst(fn, colmap=colmap, verbose=verbose, delimiter=sep, n_gwas=n_gwas)
+                    sst_df = prst.load_sst(fn, colmap=colmap, verbose=verbose, delimiter=sep, n_gwas=n_gwas, n_eff_handling=n_eff_handling)
                     sst_df['snp'] = sst_df['snp'].fillna('NA')
                     prst.io.save_sst(sst_df, out_fn, verbose=verbose)
                 except Exception as e:
@@ -860,8 +996,19 @@ class PRSTLogs(CycleDict):
                 
     def get_tictoc(self):
         if not hasattr(self,'timer'):
-            self.timer = Timer(get_memory_usage)
+            def fun():
+                gbs = get_memory_usage(show=False)
+                return f'{gbs:.3}G'
+            self.timer = Timer(fun)
         return self.timer.tic, self.timer.toc
+    
+    @property
+    def tic(self):
+         return self.get_tictoc()[0]
+    
+    @property
+    def toc(self):
+        return self.get_tictoc()[1]
 
     def finish(self):
         if hasattr(self, '_prstlogs_fn'):
@@ -879,7 +1026,7 @@ if not '__file__' in locals():
     import sys
     if np.all([x in sys.argv[-1] for x in ('jupyter','.json')]+['ipykernel_launcher.py' in sys.argv[0]]):
         with open('../prstools/utils.py', 'w') as loadrf: loadrf.write(In[-1])
-        print('Written to:', loadrf.name)
+        print('Written to:', loadrf.name, flush=True)
         if 'In' in locals() and _isdevenv_prstools:
             print('starting here in models:') 
             get_ipython().system('prst --dev-secret | head -3')

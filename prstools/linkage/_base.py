@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from scipy import linalg
 from sys import getsizeof
-import warnings, importlib, json, os, glob, copy, uuid
+import warnings, importlib, json, os, glob, copy, uuid, inspect
 from collections import OrderedDict, deque, defaultdict
 try:
     from pysnptools.standardizer import Unit, UnitTrained
@@ -746,6 +746,7 @@ class BaseLinkageData():
         fnfmt0 = join(base_dn,ref_bn+'/ldblk_{cohort}_chr{chrom}.hdf5')
         fnfmt1 = join(base_dn,ref_bn+'/snpinfo_{cohort}_hm3')
         fnfmt2 = join(base_dn,ref_bn+'/snpextinfo_{cohort}_{pop}_hm3.tsv')
+        fnfmt3 = join(base_dn,ref_bn+'/adj.tsv')
         # fnfmt = './ldblk_1kg_chr{chrom}.hdf5'
         ## A check check:
         if not allow_multi:
@@ -791,6 +792,7 @@ class BaseLinkageData():
         save_df.columns = ['CHR','SNP','BP','A1','A2','MAF']
         save_df = pd.DataFrame(save_df)
         save_df.to_csv(fnfmt1.format_map(locals()), sep='\t', index=False)
+        if hasattr(self, '_adj_df'): self._adj_df.to_csv(fnfmt3.format_map(locals()), sep='\t', index=None)
         if 'af_A1_ref' in sst_df.columns:
             sst_df[cols+['af_A1_ref']].to_csv(fnfmt2.format_map(locals()), sep='\t', index=False)
             
@@ -1143,7 +1145,8 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         pat1 = os.path.join(ref,'snpinfo*')
         lst = glob.glob(pat0)+glob.glob(pat1)
         if len(lst) == 0:
-            raise FileNotFoundError(f'No snpinfo file(s) found using the prefix {pat1}, are you sure the --ref directory is a proper prstools reference?')
+            msg = f'No snpinfo file(s) found using the prefix {pat1}, are you sure the --ref directory is a proper prstools reference?'
+            raise FileNotFoundError(msg)
         ref_fn = lst[0]
         ref_df = prst.io.load_ref(ref_fn, verbose=False)
         out_fn = os.path.join(ref,reg_bn)
@@ -1188,8 +1191,8 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         prst.io._pd_to_atomizer(to_file=ref_df.to_csv, fn=out_fn, sep='\t', index=False)
         if verbose: print('-> Done')
 
-    @classmethod
-    def from_ref(cls, ref, chrom='all', return_locals=False, reg_bn='snpregister.tsv', storetype='prscs', verbose=False, **kwg):
+    @classmethod # from_ref calls all need to mimic eachother to make cls(**kwg) work. could put a **kwg in cls.__init__ but that has other issues.
+    def from_ref(cls, ref, sst_df=None, chrom='all', return_locals=False, reg_bn='snpregister.tsv', storetype='prscs', verbose=False, regdef=None, bld=None, out_fnfmt=None, **kwg):
         ref = prst.utils.validate_path(ref=ref, must_exist=True, handle_prstdatadir='allow', verbose=False)
         reg_fn = os.path.join(ref, reg_bn)
         if not os.path.isfile(reg_fn): cls._save_snpregister(ref=ref, reg_bn=reg_bn, verbose=verbose)
@@ -1204,7 +1207,9 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
 
         ref_df = prst.io.load_ref(reg_fn, chrom=chrom, verbose=verbose) ## <--- here the magic for chrom slicing takes place..
         if not 'check' in kwg: kwg['check']=False
-        self = cls(**kwg)
+        params = inspect.signature(cls.__init__).parameters.keys() - 'self'
+        self = cls(**{k:v for k,v in kwg.items() if k in params})
+#         self = cls(**kwg)
         chrom_fn_dt={}
         for chrom in ref_df['chrom'].unique():
             lst = glob.glob(os.path.join(ref,f'*chr{chrom}.hdf5'))
@@ -1230,13 +1235,12 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
     def from_cli_params(cls, *, ref, target, sst, n_gwas=None, chrom='*', verbose=False, colmap=None, pop=None, cli=True, 
                         sstrename_dt=dict(maf='maf_sst',af_A1='af_A1_sst'), **kwg): 
         # Basic checks:
+        tic,toc = prst.utils.get_prstlogs().get_tictoc()
         if target is not None: tsttarget = '.'.join(target.split('.')[:-1])+'.bim' if (target.split('.')[-1] in ('bim','fam','bed')) else target+'.bim'
-        else: tsttarget=None
-        ref, sst, tsttarget = prst.utils.validate_path(ref=ref, sst=sst, tsttarget=tsttarget, must_exist=True, handle_prstdatadir='allow', verbose=verbose)
+        else: tsttarget=None # Im using tsttarget to test if it exist as a .bim file, but not have it as a validated output 'target' in which case a 1kg-ref.bim could overwrite (unlikely)
+        ref, sst, tsttarget = prst.utils.validate_path(ref=ref, sst=sst, tsttarget=tsttarget, must_exist=True, handle_prstdatadir=['allow',False,False], verbose=verbose)
         msg=f'Population argument specified (pop={pop}), but for this approach this information is currently not used.'
         if pop is not None and pop != 'pop': warnings.warn(msg)
-        prstlogs = prst.utils.get_prstlogs()
-        tic, toc = prstlogs.get_tictoc()
         
         # Loading:
         orisst_df = prst.load_sst(sst, calc_beta_mrg=True, n_gwas=n_gwas, colmap=colmap, verbose=verbose, cli=cli)
@@ -1261,9 +1265,11 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
                            f'sumstat ({(n_match/max(orisst_df.shape[0],1))*100:.1f}% incl.).')
         if verbose: print(msg)
          # generate spacing between loading and fit()
-        if verbose and hasattr(orisst_df, 'msg') and cli and type(orisst_df.msg) is str: print(orisst_df.msg, '\n')
-        elif verbose: print('\n')
+        dfmsg = orisst_df.attrs.get('msg', False)
+        if verbose and dfmsg and cli and type(dfmsg) is str: print(dfmsg+'\n', flush=True)
+        elif verbose: print('no-msg\n')
         linkdata = linkdata.merge(sst_df, warndupcol=False, inplace=True)
+        
         return linkdata
         
     def merge(self, sst_df, inplace=False, flipcols='auto', drop=True, aligned=False, check=True, handle_missing='filter', warndupcol=True, 

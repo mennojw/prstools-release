@@ -69,7 +69,8 @@ def sizegb(var, verbose=False):
     return size_in_gb
 
 # Beeper:
-def beep(n_beeps=1, seconds=1.,framerate = 4410,v=.8, rate=1, pitch=1., fn='completion_2.mp3'):
+def beep(n_beeps=1, seconds=1.,framerate = 4410, v=.8, volume=None, rate=1, pitch=1., fn='completion_2.mp3'):
+    if volume is not None: v=volume
     from IPython.display import Audio, clear_output
     t = np.linspace(0, seconds, int(framerate*seconds))
     audio_data = np.sin(2*np.pi*300*t*pitch)+np.cos(2*np.pi*240*t*pitch)
@@ -108,7 +109,8 @@ class Timer():
         t = time.time()
         current_line = inspect.currentframe().f_back.f_lineno
         funres = self.fun()
-        print(f'Step({len(time_lst)}): {t-time_lst[0]:.3f}, {t-time_lst[-1]:.3f} {funres} <-- line({current_line}) -- {rep}', flush=True)
+        #if funres != '': funres = f'funres={funres}'
+        print(f'Step({len(time_lst)}): {t-time_lst[0]:.3f}, {t-time_lst[-1]:.3f} {funres} <-- line({current_line}) -- {rep} ', flush=True)
         time_lst.append(t)
         
 
@@ -342,19 +344,38 @@ def get_ip():
     import IPython as ip
     return ip
 
-def get_memory_usage(show=True, prefix=''):
-    # Checking for Open File Handles !!! 4 prst reflinkagedata issues
+# def get_memory_usage(show=True, prefix=''):
+#     # Checking for Open File Handles !!! 4 prst reflinkagedata issues
+#     #https://medium.com/brexeng/debugging-and-preventing-memory-errors-in-python-e00be55e7cf2
+#     try:
+#         import psutil #, gc, time
+#     except:
+#         if show: print('Cannot give mem-usage, psutil not installed/working')
+#         return -1
+#     process = psutil.Process(os.getpid())
+#     mem_info = process.memory_info()
+#     gbs=mem_info.rss / (1024 ** 3) # Convert to GBs
+#     if show:
+#         print(f"{prefix}Memory usage: {gbs:.3} GB",)
+#     return gbs
+
+def get_memory_usage(show=True, prefix='', children=True):
+    # Checking for Open File Handles !!! 4 prst reflinkagedata issues (meaning open stuff e.g. filehandle might secretly be filling the ram. )
     #https://medium.com/brexeng/debugging-and-preventing-memory-errors-in-python-e00be55e7cf2
     try:
-        import psutil #, gc, time
-    except:
+        import psutil
+    except ImportError:
         if show: print('Cannot give mem-usage, psutil not installed/working')
         return -1
     process = psutil.Process(os.getpid())
     mem_info = process.memory_info()
-    gbs=mem_info.rss / (1024 ** 3) # Convert to GBs
-    if show:
-        print(f"{prefix}Memory usage: {gbs:.3} GB",)
+    rss = mem_info.rss
+    if children: # Now with kids!
+        for child in process.children(recursive=True):
+            try: rss += child.memory_info().rss
+            except psutil.NoSuchProcess: pass  # died between listing and querying
+    gbs = rss / (1024 ** 3)
+    if show: print(f"{prefix}Memory usage: {gbs:.3f} GB")
     return gbs
 
 def clear_memory(malloc_trim=True, postsleep=False):

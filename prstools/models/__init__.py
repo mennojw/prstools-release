@@ -1,10 +1,13 @@
 
 from prstools.models._base import *
-try:
+import importlib.util
+if importlib.util.find_spec("prstools.models._ext"):
     from prstools.models._ext import *
-except:
-    pass
 
+# try:
+#     from prstools.models._ext import *
+# except:
+#     pass
 # if np.all([x in sys.argv[-1] for x in ('jupyter','.json')]+
 #           ['ipykernel_launcher.py' in sys.argv[0]] + 
 #           [not '__file__' in locals()]):

@@ -12,7 +12,7 @@ echo 'CREATING NEW PRSTOOLS RELEASE'
 # Later a dynamic with a bleeding edge version needs to be incorporated.
 # Also a small benchmark experiment should be part of the tests  
 
-pip install -e ./
+# pip install -e ./ # why need to run this ... ?
 cd ../prstools
 echo "NBDEV PREPARE"
 nbdev_prepare
@@ -20,17 +20,18 @@ echo "VERSION BUMP"
 nbdev_bump_version
 TODAY=$(date +%d-%m-%Y)
 sed -i '' "s/^_date = .*/_date = \"$TODAY\"/" prstools/__init__.py
+
 cd "$ORIG_DIR"
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
 cd ./prstools  # ok the order of all this seems funny, but im not gonna change it for now
 python ./_cmd.py --dev-secret # !!!ahh yess, to not have all the alpha code references. 
-cd "$ORIG_DIR"
-
 
 # Commiting and push to github & pypi
 git add -u
 git commit -m "automatic release"
+git status | grep -q "nothing to commit" # Cool addition that causes crash if something is not on chain.
 git push
+
 nbdev_pypi
 
 # Test in a clean environment

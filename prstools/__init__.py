@@ -1,5 +1,5 @@
-__version__ = "0.0.65"
-_date = "25-03-2026"
+__version__ = "0.0.66"
+_date = "21-04-2026"
 
 import importlib as _importlib
 

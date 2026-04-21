@@ -1,6 +1,5 @@
 
 from prstools.linkage._base import *
-try:
+import importlib.util
+if importlib.util.find_spec("prstools.linkage._ext"):
     from prstools.linkage._ext import *
-except:
-    pass

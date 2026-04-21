@@ -127,8 +127,12 @@ def validate_linkage(D, frac=1e-4, atol=1e-6, clip=0., return_info=False):
     out = Dm, info if return_info else Dm
     return out
 
-def get_fn_trimmed(fn, exts=[".gz", ".tsv.gz", ".tsv", '.txt','.csv','csv.gz']):
-    for ext in exts:
+def get_fn_trimmed(fn, make_bn=True, exts=['.prstweights.tsv','.legacyweights.tsv', ".tsv.gz", '.csv.gz', ".tsv", ".gz", '.txt','.csv']):
+    assert type(make_bn) is bool, 'make_bn needs to be bool!'
+    if make_bn: fn = os.path.basename(fn)
+    proc_exts = [ex for ex in exts if ex.count('.')==2] + [ex for ex in exts if ex.count('.')==1] # sort extensions based on # dots
+    assert len(proc_exts) == len(exts),'contact dev!'
+    for ext in proc_exts:
         if fn.endswith(ext):
             return fn[:-len(ext)]
     return fn
@@ -618,7 +622,7 @@ def merge_snps(df0, df1, *, flipcols, afcols=[], how='left', on=['snp','AX'], re
         else: raise Exception('with handle_mssing=filter, this can be fixed.' + handlenotclimsg)
 
     ## Flipping:
-    cast=float #cast='int64[pyarrow]' # used to be int(), but now better a type with nans like float
+    cast='float64' #cast='int64[pyarrow]' # used to be int(), but now better a type with nans like float 
     mrg_df['rflip'] = -1*ind_flip.astype(cast) + 1*ind_match.astype(cast)
     indfunny = mrg_df['rflip'] == 0 #).sum() ==0, 'regerergre'
     assert indfunny.sum() == 0, 'snp alignment issue, that should not happen, please contact dev if it does.'
@@ -627,8 +631,10 @@ def merge_snps(df0, df1, *, flipcols, afcols=[], how='left', on=['snp','AX'], re
         #assert (~mrg_df[indfunny][col].isna()).sum() == 0, 
         #mrg_df[col] = (mrg_df[[col]] * mrg_df[['rflip']].values)[col] # a formulations that plays well with multicols, but issue with 1dcase
         #### You should use | as seperator for multicolumn mechanics.
-        sel = mrg_df[[col]].values; assert sel.shape[1] == 1, 'It seems a multi-column was put into this function, it is currently not designed for that, contact dev.' 
-        mrg_df[[col]] = (sel * mrg_df[['rflip']].values) # formulations I used later, should play well with both.
+        #sel = mrg_df[[col]].values; assert sel.shape[1] == 1, 'It seems a multi-column was put into this function on the "right" (merge), it is currently not designed for that, contact dev.' 
+        #mrg_df[[col]] = (sel * mrg_df[['rflip']].values) #.astype(cast) # formulations I used later, should play well with both.
+        sel = mrg_df[col]; assert len(sel.shape) == 1, 'It seems a multi-column was put into this function on the "right" (merge), it is currently not designed for that, contact dev.' 
+        mrg_df[col] = mrg_df[col] * mrg_df['rflip'] #.astype(cast) # formulations I used later, should play well with both.
     with warnings.catch_warnings(record=True): mrg_df.flipcols = flipcols
     for col in afcols: # Cols are prresent, asserted earlier
         mrg_df[f'{col}_ori'] = mrg_df[col].copy()
@@ -799,7 +805,8 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
             std_y = np.sqrt(0.5)/np.median(np.partition(pre_std_sst, -k)[-k:])
             df['std_sst'] = std_y * pre_std_sst
             df.std_y = std_y # Saving it here incase its needed later on at some point.
-            msg = f'Computed beta marginal (=X\'y/n) from sumstat using beta and its standard error and sample size (n_eff={int(n_eff_msg)}).'; df.msg=msg
+            msg = f'Computed beta marginal (=X\'y/n) from sumstat using beta and its standard error and sample size (n_eff={int(n_eff_msg)}).'; 
+            df.attrs['msg']=msg
             if verbose and not cli: print(msg)
         elif calc_beta_mrg == 'pval' or {'pval','beta','n_eff'}.issubset(cols):
             if slicenaninfs: df=naninfslicer_funct(df, testcols, verbose=verbose, ispretest=ispretest)
@@ -809,7 +816,8 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
                               ' which can lead to suboptimal performance. Use beta and se sumstat columns instead for better performance')
                 assert np.sum(df.pval == 0) == 0
             df.loc[:,'beta_mrg'] = np.sign(df.beta)*np.abs(sp.stats.norm.ppf(df.pval/2.0))/np.sqrt(n_eff) 
-            msg = f'Computed beta marginal (=X\'y/n) from sumstat using p-values and the sign of beta and sample size (n_eff={int(n_eff_msg)}).'; df.msg=msg
+            msg = f'Computed beta marginal (=X\'y/n) from sumstat using p-values and the sign of beta and sample size (n_eff={int(n_eff_msg)}).';  #df.msg=msg
+            df.attrs['msg']=msg
             if verbose and not cli : print(msg)
         else:
             cprint_input_df(df); cnames =' or '.join([f'\'{elem}\'' for elem in 'SE/se_beta/P/pval'.split('/')])
@@ -1120,9 +1128,9 @@ def pvalandbeta_to_betamrg(*, pvals, beta, n_gwas):
     if np.sum(p>1.): warnings.warn('Input p-vals contains {np.sum(p>1.)} values that are larger then 1. This could be an issue.')
     return np.sign(beta)*abs(stats.norm.ppf(pvals/2.0))/np.sqrt(n_gwas) # Original contains -1 in front, not sure this is the right way?
 
-def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', delimiter='determine', fil_arr=None, end='\n', start_string='Loading bim/fam. ', 
+def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', delimiter='determine', fil_arr=None, end='\n', start_string='Loading bim/fam. ',
                 testnrows=20, nrows=None, pretest=True, add_xidx=False, add_AX=False, check=True, pyarrow=True, verbose=False, reset_index=True):
-    if verbose: print(start_string, end='', flush=True)
+    if verbose: print(f"{start_string:<24.24}", end='', flush=True)
     if pretest:
         delimiter='\t'; nrows=testnrows; pretest=False
         pyarrowstart=pyarrow; pyarrow=False
@@ -1176,6 +1184,7 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', delimiter='d
         if report == '': report='no bim or fam file'
         if len(prw) > 1: report=report+' (used pyarrow)'
         print(f'-> {report}.', end=end, flush=True)
+        
 
     return bim_df, fam_df
 
@@ -1291,7 +1300,10 @@ def load_weights(fn, ftype='auto', pyarrow=True, sep:str='\t', verbose=False):
     else: df = pd.read_csv(fn, sep=sep, names=names, **header_dt, **prw)
     return df
 
-def load_bed(fn, make_bimfam_attrs=True, countA12correct=True, verbose=False, start_string='Loading plink files (@ {fn}). '):
+def _get_countstring(n):
+    return f"{n/1e6:.2f}M" if n>=1e6 else f"{n/1e3:.1f}k" if n>=1e3 else str(n)
+
+def load_bed(fn, make_bimfam_attrs=True, countA12correct=True, verbose=False, start_string='Loading plink files (@ {fn}) ', end=''):
     from bed_reader import open_bed
     if verbose: 
         proc_fn = f'...{fn[-17:]}' if len(fn) >= 20 else fn
@@ -1305,6 +1317,8 @@ def load_bed(fn, make_bimfam_attrs=True, countA12correct=True, verbose=False, st
     bed = open_bed(base_fn+'.bed', iid_count=iid_count, sid_count=sid_count)
     if make_bimfam_attrs:
         bed.bim_df = bim_df; bed.fam_df = fam_df
+    proc = _get_countstring 
+    if verbose: print(f"[{proc(fam_df.shape[0])} induv x {proc(bim_df.shape[0])} snps]. ", end=end, flush=True)
     return bed
 
 def load_srd(fn, make_bimfam_attrs=True, countA12correct=True, verbose=False, start_string='Loading plink files (@ {fn}). '):
@@ -1357,7 +1371,7 @@ def check_regdef(regdef_df, allow_overlap=False, verbose=False):
         assert (df['start'].values[1:] >= df['stop'].values[:-1]).all(), msg
     if verbose: print('regdef_df is valid! (i.e. required cols, sorted, unique regids, and no overlapping regions)')
 
-def load_regdef(regdef='ldgm-all-hg38', fnfmt='./data/defs/regdef/{regdef}.regdef.tsv', check=True):
+def load_regdef(regdef='ldgm-all-hg38', fnfmt='./data/defs/regdef/{regdef}.regdef.tsv', check=True, verbose=True):
     curdn = os.path.dirname(prst.__file__)
     fnfmt = os.path.join(curdn, fnfmt)
     fn = fnfmt.format(regdef=regdef)
@@ -1366,9 +1380,11 @@ def load_regdef(regdef='ldgm-all-hg38', fnfmt='./data/defs/regdef/{regdef}.regde
         lst = [os.path.basename(elem).replace('.regdef.tsv','') for elem in glob.glob(dn+'/*.regdef.tsv')]
         msg = f'{fn} \n--> You should pick from {lst} (all @ {dn}).'
         raise FileNotFoundError(msg)
-    regdef_df = pd.read_csv(fn, delimiter='\t') # dataframe with region definitions
+    if verbose: print(f'Loading regdef \'{regdef}\' ', end='', flush=True)
+    regdef_df = pd.read_csv(fn, delimiter='\t') # dataframe with region definitions 
     assert check, 'always doing check!'
     check_regdef(regdef_df)
+    if verbose: print(f'-> {regdef_df.shape[0]:,} regions loaded.', flush=True)
     return regdef_df
 
 def load_prscs_ldblk(fn,blkid):
@@ -1413,7 +1429,9 @@ def load_example(dn='./data/_example/', n_gwas=2565, pop='EUR', verbose=False):
 #         os.replace(tmp_fn, fn)
 #         return ret
 def _pd_to_atomizer(*, to_file, fn, **kwg):
-    tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"
+    bn = os.path.basename(fn)
+    dn = os.path.dirname(fn) or "."
+    tmp_fn = os.path.join(dn,f".{bn}.incomplete.{uuid.uuid4().hex[:16]}")
     try:
         ret = to_file(tmp_fn, **kwg)   # ← error happens here
         os.replace(tmp_fn, fn)
@@ -1468,15 +1486,15 @@ def save_sst(sst_df, fn=None, return_sst=False, ftype='tsv', basecols=None, addi
     if verbose: print(f'-> Done')
     if return_sst: return out_df
 
-def save_prs(yhat, *, fn, ftype='prspred.tsv', nanwarn=True, verbose=False, reset_index=True, end='\n\n'):
+def save_prs(yhat, *, fn, ftype='prstprs.tsv', nanwarn=True, verbose=False, reset_index=True, end='\n\n'):
     assert type(yhat) is pd.DataFrame, f'Input \'yhat\' is required to be pd.DataFrame. It is currently: {type(yhat)}'
     if reset_index: yhat = yhat.reset_index(drop=False) # With this the FID and IID become columns
     #yhat = yhat.rename(columns=dict(fid='FID',iid='IID')) why these names...
-    if ftype == 'prspred.tsv':
+    if ftype == 'prstprs.tsv':
         sep='\t'
         to_file = yhat.to_csv
     else:
-        raise ValueError(f"'{ftype}' is not a valid filetype/ftype. only 'prspred.tsv' availabe atm")
+        raise ValueError(f"'{ftype}' is not a valid filetype/ftype. only 'prstprs.tsv' availabe atm")
 
     fn = fn.format_map(dict(ftype=ftype)) # Maybe some AutoDict buzz here later.
     #import uuid; tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"  # unique temp file name  

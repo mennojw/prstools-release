@@ -25,14 +25,14 @@ is much appreciated!
 To install use the following command.
 
 ``` sh
-pip install -U prstools
+pip install -U --prefer-binary prstools
 ```
 
 For it to work, you should have python3.8 or later installed (`pip` is
 included in python3.8+). If the command above does not work directly you
-can install installed using `conda` (or `mamba` if you have that), by
-running `conda install "python>=3.9"` For other install issues please
-check the (install guide is still pretty basic) [install
+can install using `conda` (or `mamba` if you have that), by running
+`conda install "python>=3.9"` For other install issues please check the
+(install guide is still pretty basic) [install
 guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/00_install_guide.ipynb)
 or send us a mail.
 
@@ -43,8 +43,8 @@ also more complete [Getting Started
 Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 Immediately after installing `prstools`, it should be possible to
 download & run the demo example (~4mb), by pasting the following into
-the commandline (if not see
-[guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/00_install_guide.ipynb)):
+the commandline (if not see [install
+guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/00_install_guide.ipynb)):
 
 ``` bash
 # Makes 'example' dir with data in current path:
@@ -52,7 +52,7 @@ prstools downloadutil --pattern example --destdir ./; cd example
 
 # Run the model with example data:
 prstools prscs2 --ref ldref_1kg_pop --target target \
-                --sst sumstats.tsv --n_gwas 2565 --out --pred ./result 
+                --sst sumstats.tsv --n_gwas 2565 --out ./result 
 ```
 
 This will run PRS-CS2 on the example data, using the new implementation
@@ -123,8 +123,10 @@ For more information and a hands on demonstration of what `prstools` can
 do have a look at the [Getting Started
 Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 There is also a [video version of this
-tutorial](https://youtu.be/BP1zUBFH2l8). You can load the tutorial in a
-free cloud instance by clicking here: [![Google
+tutorial](https://youtu.be/BP1zUBFH2l8). The tutorial(video) is a tiny
+bit older than the current `prstools` version, which has more
+functionality. You can load the tutorial in a free cloud instance by
+clicking here: [![Google
 Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 
 ## Contact
