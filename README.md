@@ -31,16 +31,13 @@ pip install -U --prefer-binary prstools
 For it to work, you should have python3.8 or later installed (`pip` is
 included in python3.8+). If the command above does not work directly you
 can install using `conda` (or `mamba` if you have that), by running
-`conda install "python>=3.9"` For other install issues please check the
-(install guide is still pretty basic) [install
+`conda install "python>=3.9"`. For other install issues please check the
+[install
 guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/00_install_guide.ipynb)
 or send us a mail.
 
 ## How to use
 
-Next to this very brief discription of what `prstools` can do, there is
-also more complete [Getting Started
-Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 Immediately after installing `prstools`, it should be possible to
 download & run the demo example (~4mb), by pasting the following into
 the commandline (if not see [install
@@ -57,10 +54,12 @@ prstools prscs2 --ref ldref_1kg_pop --target target \
 
 This will run PRS-CS2 on the example data, using the new implementation
 to demonstrate the capabilities of `prstools` and makes PRS predictions
-for the example dataset.
+for the example dataset. The best and fastest way to get a PRS for your
+is to try the **Tutorial** below.
+<!-- [Getting Started Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb). -->
 
-<br> More generally you can use `prstools` by typing into the
-command-line interface:
+<br> There is also the `prstools` documentation, which resides inside of
+the command-line interface, which you can see by typing `prstools`.
 
 ``` bash
 prstools
@@ -81,9 +80,10 @@ Models & Utility Commands:
                 under continuous shrinkage (CS) priors.
 ```
 
-<br> By combining `prstools` with another `<command>` a specific model
-or other functionality can be used. <br> Forinstance typing
-`prstools prscs2` will output a help for the prscs2 subcommand:
+By combining `prstools` with another `<command>` a specific model or
+other functionality can be used. <br> Forinstance typing
+`prstools prscs2` will output the **documentation** for the prscs2
+subcommand:
 
 ``` console
 Usage:
@@ -114,19 +114,19 @@ Examples --> can be directly copy-pasted (:
  prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-prscs2 --pred                  # A shorter version of previous that also does the predictions.
 ```
 
-As can be seen, there are examples at the end of the help output to
-illustrate usage, which should work with a simple copy-paste. <br> <br>
+Soon there will be a copy of this documention online too. As can be
+seen, there are examples at the end of the help output to illustrate
+usage, which should work with a simple copy-paste. <br> <br>
 
-## Tutorial
+## Tutorial + Video
 
 For more information and a hands on demonstration of what `prstools` can
 do have a look at the [Getting Started
 Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
-There is also a [video version of this
-tutorial](https://youtu.be/BP1zUBFH2l8). The tutorial(video) is a tiny
-bit older than the current `prstools` version, which has more
-functionality. You can load the tutorial in a free cloud instance by
-clicking here: [![Google
+There is also a [Video](https://youtu.be/BP1zUBFH2l8). The
+tutorial+video is a tiny bit older than the current `prstools` version,
+which has more functionality. You can load the tutorial in a free cloud
+instance by clicking here: [![Google
 Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
 
 ## Contact

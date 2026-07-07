@@ -122,7 +122,8 @@ class BasePred(ABC):
         sst=dict(args=['--sst','-s'], kwargs=dict(required=True, metavar='<file>', 
                 help="The summary statistics file from which the model will be created. The file should contain columns: SNP, A1, A2, BETA or OR, P or SE information. "
                 "At the moment, the file is assumed to be tab-seperated, if you like other formats please let devs know. Alternative column names can be specified with "
-                "--colmap (more info below). SNP column should contain rsid's, but now these can be filled from See \033[34mhttps://tinyurl.com/sstxampl\033[0m for a sumstat example.")),
+                "--colmap (more info below). SNP column should contain rsid's, but if you dont have these they can now also be filled in with genomic position information, "
+                "by ommitting SNP in --colmap. See \033[34mhttps://tinyurl.com/sstxampl\033[0m for a sumstat example.")),
         out=dict(args=['--out','-o'], kwargs=dict(required=True, metavar='<dir+prefix>', 
                 help="Output prefix for the results (variant weights). This should be a combination of the desired output dir + file prefix.")),
         n_gwas=dict(args=['--n_gwas','-n'], kwargs=dict(required=False, type=intcaster, metavar='<num>', default=None, 
@@ -440,7 +441,7 @@ class BasePred(ABC):
         sst_lst += [chunk_sst_df]
         return stuff
     
-    def predict(self, bed, *, n_inchunk=1000, groupby=None, validate=True, dtype=None, algo=None,
+    def predict(self, bed, *, n_inchunk=1000, groupby=None, validate=True, dtype=None, algo=None, rsidmode='auto',
                 localdump=False, weight_type='allele', trait_df=None, colour='#7f00ff'): # <-- The more esotheric stuff on this line
         
         if 'pysnptools' in str(type(bed)):
@@ -465,6 +466,7 @@ class BasePred(ABC):
         
         if validate:
             bim_df = bed.bim_df.copy() # For the next line did it the other way around for mem-footprint.
+            bim_df = prst.io.validate_dataframe_rsids(bim_df, rsidmode=rsidmode)
             weights_df = weights_df.drop(columns='xidx', errors='ignore') # Make sure it does not have xidx by chance.
             p_pre = weights_df.shape[0]
             weights_df = prst.merge_snps(weights_df, bim_df, req_all_right=False, handle_missing='filter', flipcols=[]) ## HEY WAIT... WHAT!!!
@@ -476,7 +478,8 @@ class BasePred(ABC):
             assert weights_df['xidx'].dtype == 'int64', 'xidx contained a nan, this should not happen for regular users, contact dev'
             weights_df = weights_df.sort_values('xidx')
             p_post = weights_df.shape[0]; n_missing = p_pre - p_post; perc = (n_missing/p_pre) * 100.
-            inject = ', which is acceptable depending on use-case (<10%)' if perc < 10 else ''
+            inject = ', which is acceptable for a lot of use-case (<10%)' if perc < 10 else ''
+            if perc > 30: inject=', which is a high missingness rate that can give suboptimal results.'
             if n_missing > 0: msg += f'\nMissing {n_missing:,} variants ({perc:.0f}%) in the target that are in the weights{inject}.'
             if n_missing > 0 and not self._allow_missing: raise RuntimeError(msg)
         if self.verbose: print(msg)
@@ -635,14 +638,14 @@ class BaseMulti(): ## This is a base class so should Not generate objects i.e. i
     
     @classmethod
     def from_weights(cls, weights, sort=True, verbose=False, **kwg):
-        if verbose: print('Initializing multi-weight model using input weights. ',flush=True, end='')
+        if verbose: print('Initializing multi-weight model ',flush=True, end='')
         if not isinstance(weights, pd.DataFrame): # can this be done with decorator?
             raise TypeError("Input must be a DataFrame.")
         if type(weights) is dict: raise NotImplementedError()
         # A check for the required columns is also needed, somewhere.
         model = cls(**kwg, verbose=verbose)
         model._set_weights(weights, sort=sort)
-        if verbose: print('-> Done')
+        if verbose: print(f'-> Done ({weights.shape[0]:,} variant weights for {weights.shape[1]} phenotypes).')
         return model
     
     @classmethod
@@ -660,7 +663,7 @@ class BaseMulti(): ## This is a base class so should Not generate objects i.e. i
         cnt = allweights_df['snp'].duplicated().sum(); msg+=f'(dupcount={cnt:,})'
         if cnt != 0: warnings.warn(msg)
         if len(weights_dt)==1:
-            if verbose: print(f'{"Combining":<12}Since number of input weights is 1, we do not have to combine weight files.')
+            if verbose: print(f'{"Combining":<12}: Since number of input weights is 1, we do not have to combine weight files.')
             return cls.from_weights(list(weights_dt.values())[0], verbose=verbose, **kwg)
         
         # merging mechanics:
@@ -918,6 +921,7 @@ class MultiPRS(BaseMulti, BasePred, PRSTCLI):
         fn_lst = new_lst
         uniqfns  = np.unique(fn_lst)
         nuniqfns = len(uniqfns)
+        nuniq=nuniqfns
         fn_lst = uniqfns
         out_lst = []
         for fn in fn_lst: # Quickly check files exist:

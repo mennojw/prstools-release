@@ -731,8 +731,11 @@ class BaseLinkageData():
                 if self.verbose: print(f'saving: fn={curfullfn} key={key}'+' '*50,end='\r')
         geno_dt['store_dt'] = store_dt
         
-    def save_prscsfmt(self, *, out_dn=None, base_dn=None, cohort='ref', pop='adj', overwrite=True, allow_multi=False, verbose=None):
-        if verbose is None: verbose = self.verbose
+    def save_prscsfmt(self, *, dn=None, base_dn=None, out_dn=None, cohort='ref', pop='adj', overwrite=True, allow_multi=False, verbose=None): # base_dn = badname
+        # base_dn is a bad name cause of 'bn' os.path.basename
+        print('check its new! oldv + maf_ref')
+        if base_dn is None: base_dn = dn
+        if verbose is None: verbose = self.verbose 
         print(out_dn)
         assert (out_dn is not None) ^ (base_dn is not None), 'Need to supply out_dn OR base_dn'
         if out_dn is not None: out_dn = os.path.normpath(out_dn)
@@ -773,16 +776,17 @@ class BaseLinkageData():
             if not 'chrom' in geno_dt:
                 clst = geno_dt['sst_df']['chrom'].unique()
                 assert len(clst) == 1
-                geno_dt['chrom'] = clst[0]
+                geno_dt['chrom'] = clst[0] 
             chrom = int(geno_dt['chrom'])
             #if i ==1: jkergjk
             f = self.file_dt[chrom] if chrom in self.file_dt.keys() else fun(**locals())
             group = f.create_group(f'blk_{blkcnt_dt[chrom]}')
             blkcnt_dt[chrom] += 1
             D = self.get_linkage_region(i=i)
-            #group.create_dataset('ldblk', data=D) # old
+            group.create_dataset('ldblk', data=D) # old
             #group.create_dataset('ldblk', data=D, compression="gzip", compression_opts=7, shuffle=True, chunks=True) ## <<<---------- keep looking here
-            group.create_dataset('ldblk', data=D, compression='lzf', shuffle=True, chunks=True) ## <<<---------- keep looking here
+            # group.create_dataset('ldblk', data=D, compression='lzf', shuffle=True, chunks=True) ## <<<---------- keep looking here, this one is better then old
+            # but scared cause it might have cuased weird elyn behavior
             arr = np.array(geno_dt['sst_df']['snp'].to_numpy(),dtype='S')
             group.create_dataset('snplist', data=arr) #, dtype='S')
         for f in self.file_dt.values(): f.close()
@@ -1136,7 +1140,8 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
     
     @classmethod
     def _save_snpregister(cls, *, ref, reg_bn, chrom='all', verbose=False):
-
+        # ref is now ref_dn
+        ref_dn = ref
         self = cls(check=False)
         assert chrom == 'all'
         if chrom == 'all': chrom = '*'
@@ -1192,13 +1197,17 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         if verbose: print('-> Done')
 
     @classmethod # from_ref calls all need to mimic eachother to make cls(**kwg) work. could put a **kwg in cls.__init__ but that has other issues.
-    def from_ref(cls, ref, sst_df=None, chrom='all', return_locals=False, reg_bn='snpregister.tsv', storetype='prscs', verbose=False, regdef=None, bld=None, out_fnfmt=None, **kwg):
+    def from_ref(cls, ref, sst_df=None, chrom='all', return_locals=False, reg_bn='snpregister.tsv', storetype='prscs', verbose=True, regdef=None, bld=None, out_fnfmt=None, **kwg):
         ref = prst.utils.validate_path(ref=ref, must_exist=True, handle_prstdatadir='allow', verbose=False)
-        reg_fn = os.path.join(ref, reg_bn)
-        if not os.path.isfile(reg_fn): cls._save_snpregister(ref=ref, reg_bn=reg_bn, verbose=verbose)
-        lst=glob.glob(os.path.join(ref,'snpextinfo*'))
+        assert os.path.isfile(ref), f'It seems that variable ref (={ref}) is not a file. This mean something went really wrong in the software. please contact dev.'
+        msg = f'Trying to use ref={ref} as a reference, which is probably a plink bed file. However currently exectured code is meant for standard prscs references only (e.g. ldblk_1kg_afr directory).'
+        if ref.endswith('.bed'): raise ValueError(msg)
+        ref_dn = os.path.split(ref)[0]
+        reg_fn = os.path.join(ref_dn, reg_bn)
+        if not os.path.isfile(reg_fn): cls._save_snpregister(ref=ref_dn, reg_bn=reg_bn, verbose=verbose)
+        lst=glob.glob(os.path.join(ref_dn,'snpextinfo*'))
         if len(lst)>0:
-            assert len(lst) == 1, f"Only put 1 snpextinfo file in {ref}. Found {len(lst)} : {lst}"
+            assert len(lst) == 1, f"Only put 1 snpextinfo file in {ref_dn}. Found {len(lst)} : {lst}"
             ## Not actually doing this bit just yet:
 #             ext_df = prst.io.load_sst(lst[0], n_gwas=None, calc_beta_mrg=False, nrows=5, check=False, verbose=False)
 #             tst_df = prst.io.load_sst(reg_fn, n_gwas=None, calc_beta_mrg=False, nrows=5, check=False, verbose=False)
@@ -1209,10 +1218,9 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         if not 'check' in kwg: kwg['check']=False
         params = inspect.signature(cls.__init__).parameters.keys() - 'self'
         self = cls(**{k:v for k,v in kwg.items() if k in params})
-#         self = cls(**kwg)
         chrom_fn_dt={}
         for chrom in ref_df['chrom'].unique():
-            lst = glob.glob(os.path.join(ref,f'*chr{chrom}.hdf5'))
+            lst = glob.glob(os.path.join(ref_dn,f'*chr{chrom}.hdf5'))
             assert len(lst) == 1, 'Something wrong with reference, consider redownload.'
             chrom_fn_dt[chrom] = lst[0]
             

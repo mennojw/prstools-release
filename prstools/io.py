@@ -86,6 +86,19 @@ def validate_dataframe_n_eff(df, warn=True, must_exist=False):
          'This probably means that the N column in the sumstat or --n_gwas option were'
          'not specified correctly.')
     return df
+
+def validate_dataframe_rsids(df, minfrac=0.7, rsidmode=None):
+    doit = False
+    if rsidmode == 'auto': minfrac=0.7
+    if rsidmode == 'yes': doit=True
+    if 'snp' in df.columns:
+        ind = df['snp'].str.startswith('rs')
+        if ind.mean() < minfrac:
+            msg = f'Fewer than the minimum fraction of {minfrac} of snps are rsids.'
+            warnings.warn(msg);
+            if rsidmode != 'no': doit=True
+    if doit: df=get_rsids(df)
+    return df
         
 def validate_dataframe_select(df, select=None, **kwg):
     msg = 'The argument select was not properly set. This is required. options are ["index","A1A2","chrompos"]. Supply as list.'
@@ -216,7 +229,9 @@ def get_liftoverpositions(df, *, bldout, bldin=None, sort=False, inplace=False, 
     df = df.copy(); lst = []; nancnt = 0
     input_strings = (f'hg{bldin}', f'hg{bldout}')
     lo = LiftOver(*input_strings) # IT seems this work all on its own
-    chroms = df['chrom'].astype(str)
+    cmapo = {v:k for k,v in prst.io.get_chrom_map().items() if k != 'MT'}
+    cmapo.update({'26':'M'})
+    chroms = df['chrom'].astype(str).replace(cmapo)
     poss = df['pos']-1
     print('Casting to list to iterate over', flush=True)
     liftlst = list(zip(chroms, poss))
@@ -236,6 +251,7 @@ def get_liftoverpositions(df, *, bldout, bldin=None, sort=False, inplace=False, 
     df['pos'] = new_df['newpos'].astype('Int64').values +1 ### PLUS 1 !!!!!
     df['chrom'] = new_df['newchrom'].values
     cmap = get_chrom_map()
+    cmap.update({'M':'26'})
     df['chrom'] = df['chrom'].str.replace("chr","").replace(cmap)
     valid = set(cmap.values()) | set( map(str, range(1,23)))
     df.loc[~df['chrom'].isin(valid), 'chrom'] = pd.NA
@@ -260,6 +276,8 @@ def get_snpdb(snpdb_df='mini', cache_vars=('mini',)):
 
 def get_build(df, *, snpdb_df='mini', nsmp = 10_000, avail_builds = [19,38], seed=42*42, verbose=True, on_fail='error'):
     assert snpdb_df is not None, 'No snps database present for build detection! (snpdb_df argument inside of python)'
+    msg = 'Columns chrom & pos have to be present for genome build detection (and also for adding rsids)'
+    assert all(col in df.columns for col in ['chrom','pos']), msg
     if type(snpdb_df) is str:
         if snpdb_df in ('full','mini'):
             msg = 'Trying to infer genome build, but prstdatadir is not set, which is required for this functionality. '
@@ -275,27 +293,39 @@ def get_build(df, *, snpdb_df='mini', nsmp = 10_000, avail_builds = [19,38], see
     if dbfrac < 0.1: idx=np.unique(np.random.randint(0,snpdb_df.shape[0],nsmp)); nsmp=len(idx)
     else: idx = np.sort(np.random.permutation(np.arange(0,snpdb_df.shape[0]))[:nsmp])
     dbsmp_df = snpdb_df.iloc[idx]
+    uchroms = df['chrom'].unique();
+    if len(uchroms) < 20:
+        msg=('It seems you are inputing fewer then 20 unique chromosomes into genome build detection. '
+        'This could lead to crashes later. Trying workaround, but you combining all chromosomes is the safer option.')
+        warnings.warn(msg)
 
     # Do the things:
-    mrg_dt = {}; maxfrac = -1
+    mrg_dt = {}; maxfrac = -1; otherfail=False
     for bld in avail_builds:
         arg = df.rename(columns=dict(snp='oldsnp'))
         db = dbsmp_df.rename(columns={f'chrom{bld}': 'chrom', f'pos{bld}':'pos'})
+        if len(uchroms) < 20: 
+            db = db[db.chrom.isin(uchroms)]
+            otherfailmsg = f'After subsetting for chroms ({uchroms}) the build detection database is too small {db.shape[0]} so cannot detect build!'
+            if db.shape[0] < 100: 
+                warnings.warn(otherfailmsg); otherfail=True
         get_cpnum(arg); get_cpnum(db)
         db = db['cpnum']; db= db[~db.isna()].astype('Int64')
         argc = arg['cpnum']; argc = argc.astype('Int64')
         #mcnt = b['cpnum'].isin(a['cpnum']).sum()
         mcnt = db.isin(argc).sum()
-        est_tot_mcnt = mcnt/dbfrac
+        est_tot_mcnt = mcnt/(dbfrac*(db.shape[0]/dbsmp_df.shape[0]))
         estfrac = est_tot_mcnt/dbcnt
         estperc = estfrac*100
-        mrg_dt[bld] = dict(mcnt=mcnt, bcnt=(~dbsmp_df[f'chrom{bld}'].isna()).sum())
+        mrg_dt[bld] = dict(mcnt=mcnt, bcnt=db.shape[0]) #bcnt=(~dbsmp_df[f'chrom{bld}'].isna()).sum())
         if verbose: print(f'For build hg{bld}, probabilistic estimate for total number of matches is: {int(est_tot_mcnt):9,} ({min(estperc,100):5.2f}% of build detection db)')
         if estfrac > maxfrac:
             maxfrac = estfrac; maxperc = estperc
             maxbld = bld; maxmcnt = mcnt
-    msg = f'Build Detection Failed: The maximum percentage detected ({min(maxperc,100):5.2f}%) is low, meaning that genome build detection is NOT reliable!'
-    if maxperc < 70.0:
+    msg = (f'Build Detection Failed: The maximum percentage overlap with builds in the build databases'
+          f' ({min(maxperc,100):5.2f}%) is low (min 70%), meaning that genome build detection is NOT reliable!')
+    if maxperc < 70.0 or otherfail:
+        if otherfail: msg=otherfailmsg
         if on_fail == 'error': raise Exception(msg)
         elif on_fail == 'warn': warnings.warn(msg)
         else: raise ValueError(f'Option on_fail = {on_fail} not recognized')
@@ -305,6 +335,7 @@ def get_build(df, *, snpdb_df='mini', nsmp = 10_000, avail_builds = [19,38], see
 
 def get_rsids(df, *, snpdb_df='full', bld='detect', verbose=True, inplace=False, bldsnpdb_df='mini'):
     assert snpdb_df is not None, 'No snps database present! (snpdb_df argument inside of python)'
+    if verbose: print('Retrieving rsids for input based on genomic position..')
     if type(snpdb_df) is str: snpdb_df = get_snpdb(snpdb_df);
     if bld == 'detect':
         bld=get_build(df, verbose=verbose, snpdb_df=bldsnpdb_df)
@@ -330,7 +361,20 @@ def get_AX(df, opt=1, redo=False):
     df['AX'] = varb
     df.loc[ind,'AX'] = vara[ind].values #(takes 25%)
     #df['AX'][ind] = vara #(takes 18%, but give annoying warnings
-    return df 
+    return df
+
+def get_chrom_and_pos(df, bld=19, snpdb_df='full', redo=False):
+    missing = {'chrom','pos'} - set(df.columns)
+    if len(missing) > 0 or redo:
+        assert 'snp' in df.columns, 'Need to have a snp-id columns to be able to add positions!'
+        rscnt = df['snp'].str.startswith('rs').sum()
+        assert rscnt >= 50, 'SNP ids starting with "rs" smaller then 50, this must mean there are insufficient rsids in the input!'
+        if type(snpdb_df) is not pd.DataFrame: snpdb_df = prst.io.get_snpdb(snpdb_df)
+        ndf = pd.merge(df, snpdb_df, how='left', on='snp')
+        ndf['chrom'] = ndf[f'chrom{bld}'] 
+        ndf['pos']   = ndf[f'pos{bld}'] 
+    else: ndf = df
+    return ndf
 
 def get_chrompos(df, inplace=True, redo=False):
     assert inplace
@@ -389,7 +433,7 @@ def get_cols(df, *, addcols, inplace=None, redo=False):
     assert redo is False, 'Not implemented, redo=True'
     addcols_map = dict(
         AX=get_AX,
-        rsids=get_rsids,
+        rsid=get_rsids,
         chrompos=get_chrompos,
         chromposAX=get_chromposAX,
         cpnum=get_cpnum,
@@ -497,7 +541,7 @@ def get_conv_dt(*, flow, colmap=None, verbose=False):
             defcolmap = get_colmap(schema='default')
             base=defcolmap.split(','); 
             lst=colmap.split(',')
-            msg=f'current_colmap={colmap} default_colmap={defcolmap}'
+            msg=f'current_colmap={colmap} default_colmap={defcolmap} -> a copy-paste into a chatbot can probably fix this.'
             assert len(base) == len(lst), f'The colmap should have the right number of renames/commas. {msg}'
             preconv_dt = {key: item for key, item in zip(base,lst)}
         else: raise Exception('colmap is not string or dict, it should be.')
@@ -692,16 +736,17 @@ def naninfslicer_funct(start_df, cols, inf=False, verbose=False, ispretest=False
         f'{numofnans} SNPs removed from the starting total of {startlen:,} ({100*numofnans/startlen:.1f}%), {endlen:,} SNPs left.')
     if inf:
         startlen = df.shape[0]
-        ind = (df[cols].abs() > 1e99).any(axis=1)
+        ind = (np.abs(df[cols].to_numpy()) > 1e50).any(axis=1) # a slightly better isinf detector for certain 1/eps cases
         numofinfs = ind.sum()
         if numofinfs: df = df[~ind]
         endlen = df.shape[0]
         msg = (f'Inf values found in sumstat somewhere in these columns; {cols}: {numofinfs} SNPs removed from the starting '
               f'total of {startlen:,} ({100*numofinfs/startlen:.1f}%), {endlen:,} SNPs left. (e.g. possible reason: standard-error=0 effect/SE=inf).')
         if verbose and numofinfs: print(msg)
-    if not ispretest and endlen < 5: 
+    if not ispretest and endlen < 10: 
         cprint_input_df(start_df, show_dims=True)
-        raise Exception('Less than 5 SNPs left after processing, something was wrong with the input sumstat, which could mean it will need hands-on processing.')
+        raise RuntimeError('Less than 5 SNPs left after processing, something was wrong with the input sumstat, which could mean it '
+                           'will need hands-on processing. If certain columns are filled with NaNs you could consider')
     return df
 
 def compute_pvalbetase(df, *, calc_lst=['pval','beta','se_beta'], pvalmin=1e-323, copy=True, pretest=False, slicenaninfs=False, verbose=False):
@@ -762,16 +807,21 @@ def check_reqcols_sst(orisst_df, *, reqcols, colmap=None,
         print(f' Current --colmap is {colmap} {xtra}. Current colmap leads to following mapping of columns:')
         prst.io.get_conv_dt(flow='in', colmap=colmap+' ', verbose=True)
         print(f"The --colmap argument should list the column names as they appear in your input file."
-              f" For instance --colmap {example_colmap}. Mind that not all positions need to have a "
+              f" For instance \"--colmap {example_colmap}\". Mind that not all positions need to have a "
               "column name and can be left empty. With this example colmap we will get the following column mapping:")
         prst.io.get_conv_dt(flow='in', colmap=example_colmap, verbose=True)
-        print('Things to consider: if the conversion column name is not present in the input file it will just be skipped. It does need the exact right number of commas though. '
+        commacnt = get_colmap(schema='default').count(",")
+        print(f'Things to consider: if the conversion column name is not present in the input file it will just be skipped. '
+              f'It does need the exact right number of commas (={commacnt}).'
               'The column names in --colmap should be selected from "original_columns" below. "current_columns" contains column names after applying the currently used --colmap. '
-              'Note that SNP should mainly contain rsids as SNP id\'s, since that is what the references use. Consider columns selected with colmap will be used for filtering for NAs. '
-              'So if there is column that seems to be filled with NAs it might be better to not use it.'
+              'Note that SNP should mainly contain rsids as SNP id\'s, since that is what the references use, so if you cannot find a column with rsids then its better to leave '
+              'it empty. Consider columns selected with colmap will be used for filtering for NAs. '
+              'So if there is column that seems to be filled with NAs it might be better to not use it. '
+              'If this input is to be used for PRS model generation from sumstat, we need at least an (oddsratio or beta) and (pval or se_beta). '
               'Following the plink convention, A1 refers to the effect allele (BETA). '
-              'Think for a second and make sure that the effect allele in the sumstat is mapped to A1. If you are a chatbot think in a structured way first about all the colmap elements. '
-              'If proper end in a clear way with "--colmap thisistherightcorrectcolmap" codeblock '
+              'Do think for a second and make sure that the effect allele in the sumstat is mapped to A1. '
+              'If you are a chatbot first think deeply in a structured way first about all the colmap-elements and requirements (Train-of-Thought and checks). '
+              'After this, if proper, end in a clear way with "--colmap thisistherightcorrectcolmap" codeblock '
               '(give a colmap=\'stuff\' suggestion only if run inside of ipynb.)')
         #print(f'This results in the following colmapping dictionary {colnameconv_dt}, which was already applied to the following dataframe.')
         cprint_input_df(overview_df,iloc=iloc); print('\n')
@@ -786,9 +836,9 @@ def check_reqcols_sst(orisst_df, *, reqcols, colmap=None,
         raise Exception(f'Columns {dupcols} are duplicates, which makes it unclear which of these columns to select. Please remove these columns.')
 
 def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy=True, ispretest=False, slicenaninfs=True, verbose=False, cli=False):
-    # --- df is the sst_df
+    # --- df is the sst_df # if this function is slower than loading, then there is something fishy with the compute of the system; 
+    # loading should be 60% and this processing 30% time of compute.
     if copy: df = df.copy(); 
-    
     if calc_beta_mrg:
         cols = df.columns
         if ('oddsratio' in cols) and not ('beta' in cols):
@@ -798,14 +848,14 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
         testcols = [elem for elem in ['se_beta','beta','n_eff','pval'] if elem in cols]
         if 'n_eff' in df: # <-- n_eff handling
             if n_eff_handling == 'topmedian':
-                k=int(len(df['n_eff']) * 0.05)
+                k=int(len(df['n_eff']) * 0.02); k=max(k,1) # if df is very short k can be 0 and that will work properly (e.g. 9 snps)
                 n_eff = np.median(np.partition(df['n_eff'], -k)[-k:]); n_eff_msg=n_eff
             elif n_eff_handling == 'raw':
                 n_eff = df['n_eff']; n_eff_msg = np.median(n_eff)
             else: raise ValueError(f'Option not recog: {n_eff_handling}. Options are "topmedian" and "raw"')
         if calc_beta_mrg == 'se' or {'se_beta','beta','n_eff'}.issubset(cols):
             if slicenaninfs: df=naninfslicer_funct(df, testcols, verbose=verbose, ispretest=ispretest)
-            pre_std_sst = 1. / (np.sqrt(n_eff+1) * df['se_beta']); k=int(len(pre_std_sst) * 0.025)
+            pre_std_sst = 1. / (np.sqrt(n_eff+1) * df['se_beta']); k=int(len(pre_std_sst) * 0.02); k=max(k,1)
             #pre_std_sst = 1. / np.sqrt((n_eff+1) * df['se_beta']**2); k=int(len(pre_std_sst) * 0.025) #old
             #df.loc[:,'beta_mrg'] = df.beta/np.sqrt((n_eff+1)*df.se_beta**2) # old
             df.loc[:,'beta_mrg'] = df.beta*pre_std_sst # There is a funny order here 4 speed
@@ -924,14 +974,14 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
     kwg.update(ukwg); kwg.update(readkwg)
 
     # Loading
-    orisst_df = _pd_read_csv(sst_fn, **kwg)
+    orisst_df = _pd_read_csv(sst_fn, **kwg) # 60% of time
     if verbose: print(f'   -> {orisst_df.shape[0]:>12,} variants sumstat loaded.')
 
     # Checks: This part should do all the reqcol checks...
     # now this logic is spread out all over load_sst related functions
     if check: check_reqcols_sst(orisst_df, reqcols=reqcols, colmap=colmap)
     
-    # Translate:
+    # Translate: 
     conv_dt = get_conv_dt(flow='in', colmap=colmap, verbose=False)
     sst_df = orisst_df.rename(columns=conv_dt)
 
@@ -946,7 +996,7 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
             sst_df['n_eff'] = n_gwas
         from contextlib import nullcontext
         with (warnings.catch_warnings(record=True) if ispretest else nullcontext()):
-            sst_df = compute_beta_mrg(sst_df, calc_beta_mrg=calc_beta_mrg, ispretest=ispretest,
+            sst_df = compute_beta_mrg(sst_df, calc_beta_mrg=calc_beta_mrg, ispretest=ispretest, # 30% of time
                       n_eff_handling=n_eff_handling, slicenaninfs=slicenaninfs, verbose=verbose, cli=cli)
     
     if validate: 
@@ -1135,7 +1185,7 @@ def pvalandbeta_to_betamrg(*, pvals, beta, n_gwas):
     if np.sum(p>1.): warnings.warn('Input p-vals contains {np.sum(p>1.)} values that are larger then 1. This could be an issue.')
     return np.sign(beta)*abs(stats.norm.ppf(pvals/2.0))/np.sqrt(n_gwas) # Original contains -1 in front, not sure this is the right way?
 
-def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', delimiter='determine', fil_arr=None, end='\n', start_string='Loading bim/fam. ',
+def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', cmap=True, delimiter='determine', fil_arr=None, end='\n', start_string='Loading bim/fam. ',
                 testnrows=20, nrows=None, pretest=True, add_xidx=False, add_AX=False, check=True, pyarrow=True, verbose=False, reset_index=True):
     if verbose: print(f"{start_string:<24.24}", end='', flush=True)
     if pretest:
@@ -1162,8 +1212,8 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', delimiter='d
                          names=['fid', 'iid', 'father', 'mother', 'gender', 'trait'],dtype={0: str, 1: str}) if fam else None
     if bim:
         if check: assert bim_df.head(testnrows).isna().sum().sum()==0, 'NaN detected in bim dataframe.'
-        if not pd.api.types.is_numeric_dtype(bim_df['chrom']):
-            cmap = get_chrom_map()
+        if not pd.api.types.is_numeric_dtype(bim_df['chrom']) and cmap:
+            cmap = get_chrom_map() if cmap is True else cmap
             bim_df["chrom"] = bim_df["chrom"].replace(cmap) # the to_numeric() step can be slow, speedup is involved.
             bim_df['chrom'] = pd.to_numeric(bim_df['chrom'], errors='coerce').astype('Int64') # rrx= bim_df['chrom'].unique() appears fast, so perhaps fix, mod cmap
         if not chrom in ['*','all']:
@@ -1302,7 +1352,7 @@ def load_weights(fn, ftype='auto', pyarrow=True, sep:str='\t', verbose=False):
     header_dt = dict(header=None) if cur_ftype in ['headless-txt', 'legacyweights.tsv'] else {}
     from prstools.models import BasePred
     names = None if not cur_ftype == 'legacyweights.tsv' else BasePred.default_weight_cols
-    if cur_ftype == 'prstweights.h5': df = pd.read_hdf(fn, key='df')
+    if cur_ftype == 'prstweights.h5': df = pd.read_hdf(fn, key='df') 
     elif cur_ftype == 'prstweights.parquet': df = pd.read_parquet(fn)
     else: df = pd.read_csv(fn, sep=sep, names=names, **header_dt, **prw)
     return df
@@ -1314,12 +1364,12 @@ def load_bed(fn, make_bimfam_attrs=True, countA12correct=True, verbose=False, st
     from bed_reader import open_bed
     if verbose: 
         proc_fn = f'...{fn[-17:]}' if len(fn) >= 20 else fn
-        print(start_string.format_map(prst.utils.AutoDict(fn=proc_fn)), end='', flush=True)
+        print(start_string.format_map(prst.utils.AutoDict(fn=proc_fn)), end='', flush=True) 
     fn = prst.utils.validate_path(fn=fn, must_exist=False)
     iid_count=None; sid_count=None
     if make_bimfam_attrs:
         bim_df, fam_df = prst.load_bimfam(fn,add_xidx=True, add_AX=True)
-        iid_count=fam_df.shape[0]; sid_count=bim_df.shape[0]
+        iid_count=fam_df.shape[0]; sid_count=bim_df.shape[0] 
     base_fn = '.'.join(fn.split('.')[:-1]) if (fn.split('.')[-1] in ('bim','fam','bed')) else fn
     bed = open_bed(base_fn+'.bed', iid_count=iid_count, sid_count=sid_count)
     if make_bimfam_attrs:

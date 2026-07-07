@@ -1,5 +1,5 @@
 #| export
-import os, json, time, shutil
+import os, json, time, shutil, glob
 from prstools._ext_utils import *
 import prstools as prst
 import warnings, threading
@@ -86,7 +86,7 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
                 tstarg = os.path.join(prstdatadir, arg)
                 argexists = os.path.exists(tstarg)
                 if argexists: arg=tstarg
-                if key=='ref' and not argexists:
+                if key=='ref' and not argexists: # allow ref='1kg_afr' to work by auto appending 'ldblk_'
                     tstarg = os.path.join(prstdatadir, 'ldblk_'+arg);
                     if os.path.exists(tstarg): arg=tstarg
                 argexists = os.path.exists(arg)
@@ -129,13 +129,34 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
             msg = '\n' + str(disp_df) + '\nFileNotFoundError: ' + msg
             raise FileNotFoundError(msg)
             
-        if not os.path.exists(arg) and must_exist: # <- Ok so after handling it still does not exist, we will be throwing a custom error
-            msg = f'Could not find "{arg}" no such file or directory.' # you could make the messages a bit better
+        if not os.path.exists(arg) and (must_exist or key == 'ref'): # <- Ok so after handling it still does not exist, we will be throwing a custom error
+            msg = f'Could not find "{arg}" no such file or directory. ' # you could make the messages a bit better
+            if key == 'ref' and not must_exist: msg += '(Developer-note: variable "ref" always has to exist).'
             xtra_maybelater = '\nNote: the argument does start with . or / or has 2+ of slashes. ' if do_prstdd and not is_prstdatadir_compliant else ''
             xtra=''; msg = msg + xtra
             raise FileNotFoundError(msg)
+        
+        if key == 'ref': # At this point ref exists as file or dir. # Ref specific processing
+            lst = [f for p in ['*.bed', 'snpinfo*'] for f in glob.glob(os.path.join(arg, p))]
+            msg = (f'Reference directory must contain 1 and only one file ending with ".bed" or starting '
+                   f'with "snpinfo" to be a proper prstools reference. \nFound {len(lst)} matching files ({lst}) in --ref/ref: {arg} \n'
+                   f'Are you sure your current --ref argument is a proper prstools reference?')
+            if os.path.isdir(arg):
+                if len(lst) == 1: arg = lst[0]
+                elif len(lst) > 1: raise RuntimeError(msg)
+                else: raise FileNotFoundError(msg)
+            msgf = msg+('\nref/--ref variable needs to be a file now (after some processing) now it is something else. '
+                   'Your reference(s) might be corrupted. You can delete and redownload them.')
+            assert os.path.isfile(arg), msgf
+            bn = os.path.basename(arg)
+            cond = bn.startswith('snpinfo') or bn.endswith('.bed')
+            msg5 = (f'File {arg} does not start with snpinfo or end with .bed meaing it cannot be a proper prstools reference. '
+                   f'Are you sure --ref was targeting a proper prstools reference?')
+            if not cond: FileNotFoundError(msg5)
+            else: True # All is good! for "ref" the filename is valid and the file exists!
+            
         newargs += [arg]
-
+        
     return newargs[0] if len(newargs) == 1 else tuple(newargs)
     
 # def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, **kwg):
