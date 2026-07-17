@@ -1,4 +1,5 @@
-import os, time, sys, argparse, json
+import os, time, sys, argparse, json, copy
+copypackage = copy
 from prstools import __version__, _date# as version, date
 # import gc,tracemalloc,objgraph,psutil
 
@@ -163,12 +164,20 @@ def load_config():
     
     return prstcfg
 
+
+# import pandas as pd
 _prstcfg = None
-def get_config(reload=False):
+def get_config(reload=False, copy=True):
     global _prstcfg
-    if _prstcfg is None and not reload:
-        _prstcfg = load_config() 
-    return _prstcfg
+    if _prstcfg is None or reload:
+        _prstcfg = load_config()
+    if copy: return copypackage.deepcopy(_prstcfg)
+    else: return _prstcfg
+    
+def set_config(**kwg):
+    prstcfg=get_config(copy=False)
+    for key, item in kwg.items():
+        prstcfg[key] = copypackage.deepcopy(item)
 
 def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk Score creation [v{v}]. \n\'prst\' is a commandline shorthand for \'prstools\'",
                subparserkwg_lst=None, basecmd='prstools', return_spkwg=False, reload=False):
@@ -303,8 +312,9 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                     cur_group.add_argument(*item['args'], **process_argkwargs(item['kwargs']))
             
             # Set func to be linked to all the args:
+            data_pkwargs = spkwg['groups'].get('data',{}).get('pkwargs', {})
             func = retrieve_classmethod(modulename=spkwg['modulename'], clsname=spkwg['clsname'], methodname='from_cli_params_and_run')
-            subcmd_parser.set_defaults(func=func, pkwargs=grpkwg['pkwargs'], the_parser=subcmd_parser, display_info=spkwg.get('display_info',True)) # Yes it needs to b
+            subcmd_parser.set_defaults(func=func, data_pkwargs=data_pkwargs, pkwargs=grpkwg['pkwargs'], the_parser=subcmd_parser, display_info=spkwg.get('display_info',True)) # Yes it needs to b
         else:
             raise Exception('Subparser subtype not recognized, Contact dev.')
     
@@ -324,14 +334,13 @@ def main(argv=None):
     args_dt = vars(args)
     if 'display_info' in args_dt:
         display_info = args_dt['display_info']
-    else:
-        display_info = True
+    else: display_info = True
     #display_info = True if 'pkwargs' in args else False ## This is not based on pkwargs prescence but perhaps this should be set instead...
     # since all commands now have it...
     timestampfmt = "%a, %d %b %Y %H:%M:%S %z"
 
     if display_info:
-        param_dt = vars(args)
+        param_dt = vars(args) # This param_dt is only for this if displayinfo blurb, for rest args_dt, whcih means mostly same
         topstr = '\n'.join([
             f'PRSTOOLS v{__version__} ({_date})',
             f'Running command: {args.command}',
@@ -350,16 +359,20 @@ def main(argv=None):
         print()
     else: print(f'PRSTOOLS v{__version__} ({_date})')
     
-    
     # Need to happen here because it needs to happen before numpy/scipy is imported:  
     #**{key:item for key, item in args_dt.items() if key=='cpus'}if 'cpus' in args_dt:  
-    cpus = args_dt.get('cpus', get_default_cpus())
+    cpus = int(args_dt.get('cpus', get_default_cpus()))
     cpu_display_string = set_cpu_envvars(cpus, output_string=True)
 
     # Initialize logs and grab certain parts:
     from prstools.utils import get_prstlogs; 
     import pandas as pd; import socket
     start = pd.Timestamp.now(); hostname = socket.gethostname(); cwd=os.getcwd()
+    defaultmkdir = args_dt.get('data_pkwargs',{}).get('mkdir',{}).get('kwargs',{}).get('default',None)
+    mkdir = args_dt.get('mkdir', defaultmkdir)
+#     import prstools as prst
+#     prst.utils.get_ip().embed()
+    if mkdir is not None: set_config(mkdir=mkdir)        
     if 'seed' in args_dt.get('pkwargs',''):
         if not 'seed' in args_dt:
             args_dt['seed']=int(time.time()) % (2**32)  
@@ -368,10 +381,15 @@ def main(argv=None):
     else: displayseed=None
     if 'n_jobs' in args_dt.get('pkwargs',''):
         if not 'n_jobs' in args_dt:
-            n_jobs = str(args_dt['pkwargs']['n_jobs']['kwargs']['default'])
-        else: n_jobs = str(args_dt['n_jobs'])
+            n_jobs = int(args_dt['pkwargs']['n_jobs']['kwargs']['default'])
+        else: n_jobs = int(args_dt['n_jobs'])
         displaynjobs = f'Number of workers: {n_jobs} [--n_jobs]'
         cpu_display_string = str(cpu_display_string) + ' (per worker)'
+        if type(n_jobs) is int and n_jobs < 20 and cpus > 1:
+            msg = (f'WARNING: --cpus > 1 but your --n_jobs (={n_jobs}) is not maxedout yet. This can make things run slower. '
+                'It is generally best to first maxout (=22) --n_jobs before increasing the number of CPUs above 1.')
+            import prstools as prst
+            prst.warn(msg, colour='yellow', bold=False)
     else: displaynjobs=None
     
     prstlogs = get_prstlogs()

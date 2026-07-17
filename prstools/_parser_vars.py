@@ -169,7 +169,7 @@ def get_subparserkwg_lst():
                   'clear_linkdata': {'args': ['--clear_linkdata'], 'kwargs': {'help': None, 'type': bool, 'default': True}},
                   'scaling': {'args': ['--scaling'], 'kwargs': {'help': None, 'type': str, 'default': 'ref'}},
                   'pop': {'args': ['--pop'], 'kwargs': {'help': None, 'type': str, 'default': 'pop'}},
-                  'n_jobs': {'args': ['--n_jobs'], 'kwargs': {'help': 'This sets the number of jobs for parallel processing.', 'type': int, 'default': 4}},
+                  'n_jobs': {'args': ['--n_jobs'], 'kwargs': {'help': 'This sets the number of jobs for parallel processing.', 'type': int, 'default': 8}},
                   'pbar': {'args': ['--pbar'], 'kwargs': {'help': None, 'type': bool, 'default': True}},
                   'verbose': {'args': ['--verbose'], 'kwargs': {'help': None, 'type': bool, 'default': False}}},
       'subtype': 'BasePred'},
@@ -186,8 +186,8 @@ def get_subparserkwg_lst():
                                                   'kwargs': {'metavar': '<number-of-cpus>',
                                                              'default': 1,
                                                              'type': int,
-                                                             'help': 'The number of CPUs to use (1–5 is generally most efficient). It is generally best to first maxout --n_jobs before increasing the '
-                                                                     'number of CPUs above 1. To disable set to -1.'}}}},
+                                                             'help': 'The number of CPUs to use (1–5 is generally most efficient). It is generally best to first maxout (=22) --n_jobs before increasing '
+                                                                     'the number of CPUs above 1. To disable set to -1.'}}}},
                  'data': {'grpheader': 'Data Arguments',
                           'pkwargs': {'weights': {'args': ['--weights', '-w'],
                                                   'kwargs': {'help': 'The weight file(s) for the PRS. Can be specified with * operator. For example "-w greatprsweights_trait=*.tsv".  ergerg',
@@ -200,12 +200,21 @@ def get_subparserkwg_lst():
                                                             'type': str_or_none,
                                                             'metavar': '<bim-prefix>',
                                                             'help': 'Specify the bim file or its prefix of desired target dataset. The bim file should be in plink format. You can also set the target to '
-                                                                    "'none' in which case the variant set will not be filtered for variants present in the target set."}},
+                                                                    "'none' in which case the variant set will not be filtered for variants present in the target set. For the --target there is also the "
+                                                                    '--rsidmode option in case your bim does not contain (enough) rsids.'}},
                                       'out': {'args': ['--out', '-o'],
                                               'kwargs': {'required': True,
                                                          'metavar': '<dir+prefix>',
                                                          'help': 'Output prefix for the results (variant weights). This should be a combination of the desired output dir + file prefix.Suggestion: "--out '
                                                                  '{trimweights}_{target}".'}},
+                                      'mkdir': {'args': ['--mkdir', '-m'], 'kwargs': {'help': None, 'type': bool, 'default': False}},
+                                      'rsidmode': {'args': ['--rsidmode'],
+                                                   'kwargs': {'type': str,
+                                                              'metavar': '<yes/no>',
+                                                              'default': 'auto',
+                                                              'help': 'Optional: Allows one to set if rsids should be added to the .bim file information for the target after loading. This is done using '
+                                                                      'chrom and position information. This can make sense if you bim file contains few rsids. By adding rsids after loading the target '
+                                                                      'can be merged with the LD reference or PRS weights.'}},
                                       'pred': {'args': ['--pred', '-p'],
                                                'kwargs': {'required': False,
                                                           'metavar': '<yes/no>',

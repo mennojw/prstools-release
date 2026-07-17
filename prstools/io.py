@@ -87,15 +87,15 @@ def validate_dataframe_n_eff(df, warn=True, must_exist=False):
          'not specified correctly.')
     return df
 
-def validate_dataframe_rsids(df, minfrac=0.7, rsidmode=None):
+def validate_dataframe_rsids(df, warn=True, minfrac=0.5, rsidmode=None):
     doit = False
-    if rsidmode == 'auto': minfrac=0.7
+    if rsidmode == 'auto': minfrac=0.5
     if rsidmode == 'yes': doit=True
     if 'snp' in df.columns:
         ind = df['snp'].str.startswith('rs')
         if ind.mean() < minfrac:
             msg = f'Fewer than the minimum fraction of {minfrac} of snps are rsids.'
-            warnings.warn(msg);
+            if warn: prst.warn(msg, colour='yellow');
             if rsidmode != 'no': doit=True
     if doit: df=get_rsids(df)
     return df
@@ -946,7 +946,7 @@ def _validate_kwg_load_fun(fn, *, load_fun, ukwg_lst=None, **kwg): ## keep close
     msg = 'Tried recovery of sumstat loading with different options, but loading in the sumstat did not work.'
     warnings.warn(msg)
     raise ori_err
-
+                                                    # Mind for addrids (this should not set with --addrids in code)
 def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_mrg=True, n_gwas=None, n_eff_handling='topmedian', delimiter=None, chrom=None, comment=None,
              reqcols=['snp','A1','A2',('beta','oddsratio'),('pval','se_beta')], pyarrow=True, pretest=True, check=True, slicenaninfs=True, validate=True, verbose=True, 
              nrows=None, testnrows=100, ispretest=False, cli=False, readkwg=None): # do not change pretest
@@ -1002,6 +1002,7 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
     if validate: 
         sst_df = validate_dataframe_index(sst_df, warn=False)
         sst_df = validate_dataframe_select(sst_df, select=['A1A2','chrompos', 'n_eff'], warn=False if ispretest else True)
+        _      = validate_dataframe_rsids(sst_df, warn=False if ispretest else True, rsidmode='no')
     else: warnings.warn('load_sst function was set to validate=False. This can lead to bad results.')
     if addcols: sst_df = get_cols(sst_df, addcols=addcols)
     if addrsids and not ispretest:
@@ -1186,13 +1187,14 @@ def pvalandbeta_to_betamrg(*, pvals, beta, n_gwas):
     return np.sign(beta)*abs(stats.norm.ppf(pvals/2.0))/np.sqrt(n_gwas) # Original contains -1 in front, not sure this is the right way?
 
 def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', cmap=True, delimiter='determine', fil_arr=None, end='\n', start_string='Loading bim/fam. ',
-                testnrows=20, nrows=None, pretest=True, add_xidx=False, add_AX=False, check=True, pyarrow=True, verbose=False, reset_index=True):
+                testnrows=20, nrows=None, pretest=True, rsidmode=False, add_xidx=False, add_AX=False, check=True, pyarrow=True, verbose=False, reset_index=True,
+                ispretest=False):
     if verbose: print(f"{start_string:<24.24}", end='', flush=True)
     if pretest:
         delimiter='\t'; nrows=testnrows; pretest=False
         pyarrowstart=pyarrow; pyarrow=False
         kwg = locals(); kwg.pop('pyarrowstart')
-        kwg['verbose']=False
+        kwg['verbose']=False; kwg['ispretest']=True
         try: load_bimfam(**kwg)
         except: 
             delimiter=r'\s+'; warnings.warn('Trying with delimiter=\s+, this can sometimes fix issues.')
@@ -1226,10 +1228,14 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', cmap=True, d
         if reset_index: bim_df = validate_dataframe_index(bim_df, warn=False)
         if add_AX: bim_df = get_AX(bim_df)
         n_snps_end = bim_df.shape[0]
-        if pretest and bim_df.shape[0]<1e2:
+        if not ispretest and bim_df.shape[0]<1e2:
             msg = (f'\033[1;31mWARNING: The size of the loaded bim set is less than 100 (= {bim_df.shape[0]} snps). '
                   'Often a sign something is going wrong (e.g. chrom of choice not present input bim/reference file) \033[0m')
             print(''); warnings.warn(msg)
+        if not ispretest and rsidmode:
+            bim_df = prst.io.validate_dataframe_rsids(bim_df, rsidmode=rsidmode)
+            
+        
     if verbose:
         lst=[]
         if bim: inject = f', selecting {n_snps_end:,} with chrom={chrom}' if 'ind' in locals() and ind.shape != bim_df.shape[0] else ''

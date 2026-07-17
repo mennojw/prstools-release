@@ -1240,7 +1240,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         return self
     
     @classmethod
-    def from_cli_params(cls, *, ref, target, sst, n_gwas=None, chrom='*', verbose=False, colmap=None, pop=None, cli=True, 
+    def from_cli_params(cls, *, ref, target, sst, n_gwas=None, chrom='*', verbose=False, colmap=None, pop=None, cli=True, rsidmode='auto',
                         sstrename_dt=dict(maf='maf_sst',af_A1='af_A1_sst'), **kwg): 
         # Basic checks:
         tic,toc = prst.utils.get_prstlogs().get_tictoc()
@@ -1250,15 +1250,18 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         msg=f'Population argument specified (pop={pop}), but for this approach this information is currently not used.'
         if pop is not None and pop != 'pop': warnings.warn(msg)
         
-        # Loading:
-        orisst_df = prst.load_sst(sst, calc_beta_mrg=True, n_gwas=n_gwas, colmap=colmap, verbose=verbose, cli=cli)
-        target_df, _ = prst.load_bimfam(target, fam=False, chrom=chrom, start_string = 'Loading target file.    ', verbose=verbose) if target else (None,None)
-        linkdata = cls.from_ref(ref, chrom=chrom, verbose=verbose, sst_df=orisst_df, **kwg)
-        ref_df   = linkdata.get_sumstats_cur()
+        # Loading & validation:
+        orisst_df    = prst.load_sst(sst, calc_beta_mrg=True, n_gwas=n_gwas, colmap=colmap, verbose=verbose, cli=cli)
+        target_df, _ = prst.load_bimfam(target, fam=False, rsidmode=rsidmode, chrom=chrom, start_string='Loading target file.    ', verbose=verbose) if target else (None,None)
+        linkdata     = cls.from_ref(ref, chrom=chrom, verbose=verbose, sst_df=orisst_df, **kwg)
+        ref_df       = linkdata.get_sumstats_cur()
         msg = (f'\033[1;31mWARNING: The size of the reference (={ref_df.shape[0]} snps) is much smaller than the sumstat (={orisst_df.shape[0]} snps). '
                'Are you sure you are using the right reference and not the reference example?\033[0m')
-        if ref_df.shape[0] < 1e4 and orisst_df.shape[0] > 1e5: warnings.warn(msg) 
+        if ref_df.shape[0] < 1e4 and orisst_df.shape[0] > 1e5: prst.warn(msg, colour='red', bold=True)
+        msg = f'A sumstat of size {orisst_df.shape[0]:,} is quite small! Most have 100K+ variants.'
+        if ref_df.shape[0] > 1e4 and orisst_df.shape[0] < 1e5: prst.warn(msg, colour='yellow')
         orisst_df.rename(columns=sstrename_dt, inplace=True)
+        target_df = prst.io.validate_dataframe_rsids(target_df, rsidmode=rsidmode)
 
         # Matching:
         if verbose: print('Matching sumstat & reference ', end='', flush=True)
@@ -1266,12 +1269,15 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         sst_df = prst.merge_snps(ref_df, orisst_df, flipcols=['beta_mrg','beta'], handle_missing='filter', extradropdupcols=ddups)
         if verbose and target: print('& target. ', end='', flush=True)
         sst_df = prst.merge_snps(sst_df, target_df, flipcols=[], handle_missing='filter', extradropdupcols=ddups, warndupcol=True) if target else sst_df
-        n_match = sst_df.shape[0]
+        n_match = sst_df.shape[0]; reffrac = n_match/max(ref_df.shape[0],1)
         msg = (f'-> {n_match:,} common variants after matching ' +
-                          f'reference ({(n_match/max(ref_df.shape[0],1))*100:.1f}% incl.), ' +
+                          f'reference ({reffrac*100:.1f}% incl.), ' +
                           (f'target ({(n_match/max(target_df.shape[0],1))*100:.1f}% incl.) and ' if target else 'and ') +
                            f'sumstat ({(n_match/max(orisst_df.shape[0],1))*100:.1f}% incl.).')
         if verbose: print(msg)
+        msg = (f'The matching percentage of the reference is below 30% (It\'s {reffrac*100:.1f}%).'
+                ' This might indicate an issue, since most modern sumstats will have 80%+.')
+        if reffrac < 0.3: prst.warn(msg, colour='yellow')
          # generate spacing between loading and fit()
         dfmsg = orisst_df.attrs.get('msg', False)
         if verbose and dfmsg and cli and type(dfmsg) is str: print(dfmsg+'\n', flush=True)

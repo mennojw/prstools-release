@@ -21,7 +21,10 @@ def optional_import(path, name=None, default=None):
     
 # from prstools._cmd import load_config, save_config, remove_config
 _devonlymsg =  "If you see this message something went wrong in an unexpected way. Please contact the developer."
-
+def get_config(*a, **kw):
+    from prstools._cmd import get_config as _f; return _f(*a, **kw)
+def set_config(*a, **kw):
+    from prstools._cmd import set_config as _f; return _f(*a, **kw)
 def load_config(*a, **kw):
     from prstools._cmd import load_config as _f; return _f(*a, **kw)
 def save_config(*a, **kw):
@@ -29,6 +32,43 @@ def save_config(*a, **kw):
 def remove_config(*a, **kw):
     from prstools._cmd import remove_config as _f; return _f(*a, **kw)
 
+
+# _COLOURS = dict(
+#     red="#ff3333", orange="#ff9900", yellow="#ffd700",
+#     green="#00cc66", cyan="#00c2ff", blue="#3399ff",
+#     purple="#7f00ff", pink="#ff4fd8", grey="#888888",
+# )
+
+# def format_colour(msg, colour="yellow"):
+#     if colour is None: return str(msg)
+#     colour = _COLOURS.get(colour, colour)
+#     h = colour.lstrip("#")
+#     r, g, b = int(h[:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+#     return f"\033[38;2;{r};{g};{b}m{msg}\033[0m"
+
+_COLOURS = dict(black="30", red="31", green="32", yellow="33", 
+    blue="34", magenta="35", ogpurple="35", purple='38;2;127;0;255', cyan="36", white="37",
+    grey="90", gray="90", orange="38;5;208", pink="38;5;213")
+
+def _get_rgbcode_from_hexcode(hexcode):
+    h = hexcode.lstrip("#")
+    r, g, b = int(h[:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"38;2;{r};{g};{b}"
+
+def format_string(msg, colour="yellow", bold=False, rgb=False):
+    codes= []
+#     if colour is None: return str(msg)
+    code = _COLOURS.get(colour, None)
+    if type(colour) is str and colour.startswith('#'): code = _get_rgbcode_from_hexcode(colour)
+    if code is None and colour is not None: raise ValueError(f'{colour=} not recognized as valid color.')
+    if code is not None: codes += [code]
+    if bold: codes += ['1']
+    return f"\033[{';'.join(codes)}m{msg}\033[0m"
+
+def warn(msg, category=UserWarning, stacklevel=2, colour=None, bold=False, **kwg):
+    msg = format_string(msg, colour=colour, bold=bold)
+    warnings.warn(msg, category=category, stacklevel=stacklevel, **kwg)
+    
 def plot_manhattan(data_df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323, palette='bright', aspect=4, s=6.,title='Manhattan plot', **snskwg):
     import pandas as pd
     import numpy as np

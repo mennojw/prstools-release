@@ -1,5 +1,5 @@
-__version__ = "0.0.69"
-_date = "07-07-2026"
+__version__ = "0.0.70"
+_date = "17-07-2026"
 
 import importlib as _importlib
 
@@ -39,8 +39,9 @@ _lazy_exports = {
     "save_prs": "prstools.io",
     "save_sst": "prstools.io",
     
-    # An extra:
+    # And extras:
 	"merge_snps": "prstools.io",
+	"warn"      : "prstools.utils"
 }
 
 __all__ = (

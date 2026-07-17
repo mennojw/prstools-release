@@ -35,13 +35,14 @@ class BasePred(ABC):
     default_weight_cols = ['chrom','snp','pos','A1','A2','allele_weight']
     extra_weight_cols   = False
     default_sst_cols = ['SNP','A1','A2','BETA']
-    dtype_pred = 'float32'
+    #dtype_pred = 'float32' # It was float32 first here, but then i got scared so turned it to float64
+    dtype_pred = 'float64'
     _nancheck = True
     scaling = 'ref'
     shuffle = False
     _clear_cache=True
     _close_pbar = True
-    _default_n_jobs=4
+    _default_n_jobs=8
     _allow_missing=True
     algo_pred = 'i8fast'
     _display_info = True
@@ -102,13 +103,14 @@ class BasePred(ABC):
             basic_pkwargs = dict(
                 basics=dict(args=['-h','--help'], kwargs=dict(action='help', help='Show this help message and exit.')),
                 cpus=dict(args=['--cpus','-c'], kwargs=dict(metavar='<number-of-cpus>', default=prst._cmd.get_default_cpus(), type=int, 
-                                                help='The number of CPUs to use (1–5 is generally most efficient). It is generally best to first maxout --n_jobs before increasing the number of '
+                                                help='The number of CPUs to use (1–5 is generally most efficient). It is generally best to first maxout (=22) --n_jobs before increasing the number of '
                                                             'CPUs above 1. To disable set to -1.')))
 
 #         intcaster = lambda x: int(float(x))
 #         def str_or_none(x): return None if x.lower() == "none" else x
 #         intcaster = int
 #         str_or_none = str
+        import argparse
         def str_or_none(arg): return str(arg)
         def intcaster(x): return int(float(x))
 #          \033[34mhttps://tinyurl.com/sstxampl\033[0m 
@@ -118,7 +120,8 @@ class BasePred(ABC):
                 "with '{basecmd} downloadutil'. Current config relevant to this functionality (prstdatadir: {prstdatadir}, auto_download: {auto_download}).")),
         target=dict(args=['--target','-t'], kwargs=dict(required=True, type=str_or_none, metavar='<bim-prefix>', 
                 help="Specify the bim file or its prefix of desired target dataset. The bim file should be in plink format. You can also set "
-                "the target to 'none' in which case the variant set will not be filtered for variants present in the target set.")),
+                "the target to 'none' in which case the variant set will not be filtered for variants present in the target set. "
+                "For the --target there is also the --rsidmode option in case your bim does not contain (enough) rsids.")),
         sst=dict(args=['--sst','-s'], kwargs=dict(required=True, metavar='<file>', 
                 help="The summary statistics file from which the model will be created. The file should contain columns: SNP, A1, A2, BETA or OR, P or SE information. "
                 "At the moment, the file is assumed to be tab-seperated, if you like other formats please let devs know. Alternative column names can be specified with "
@@ -126,6 +129,8 @@ class BasePred(ABC):
                 "by ommitting SNP in --colmap. See \033[34mhttps://tinyurl.com/sstxampl\033[0m for a sumstat example.")),
         out=dict(args=['--out','-o'], kwargs=dict(required=True, metavar='<dir+prefix>', 
                 help="Output prefix for the results (variant weights). This should be a combination of the desired output dir + file prefix.")),
+        mkdir=dict(args=['--mkdir','-m'], kwargs=dict(#action='store_true', # {'help': None, 'type': <class 'bool'>, 'default': True}
+                help=None, type=type(True), default=False)),
         n_gwas=dict(args=['--n_gwas','-n'], kwargs=dict(required=False, type=intcaster, metavar='<num>', default=None, 
                 help="Sample size of the GWAS. Not required if sumstat has a 'N' column and overrules column data if specified.")),
         chrom=dict(args=['--chrom'], kwargs=dict(required=False, type=str, metavar='<chroms>', default='all', 
@@ -135,6 +140,9 @@ class BasePred(ABC):
                 "(in that order). Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,,,\" (OR, N, FRQA1, are excluded in this example). "
                 "When the command is run a quick this_column -> that_column conversion table will be shown. Additionaly prstools has many internal checks to make "
                 "sure a good PRS will be generated! The original default colmap works with the PRS-CS standard sumstat formatting.")),
+        rsidmode=dict(args=['--rsidmode'], kwargs=dict(type=str, metavar='<yes/no>', default='auto', 
+                help="Optional: Allows one to set if rsids should be added to the .bim file information for the target after loading. This is done using chrom and position information. "
+                "This can make sense if you bim file contains few rsids. By adding rsids after loading the target can be merged with the LD reference or PRS weights.")),
         pred=dict(args=['--pred','-p'], kwargs=dict(required=False, metavar='<yes/no>', type=str, default='auto', 
                 help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. "
                 "With the 'auto' option (which is the default) the tool tries to generate a prediction unless the --chrom option is set. Available options: (yes/no/auto)."))
@@ -144,6 +152,7 @@ class BasePred(ABC):
         doc = dedent(cls.__doc__)
         epilog = getattr(cls, '_get_cli_epilog', lambda: None)()
         display_info = getattr(cls, '_display_info', False)
+#         kergkreg
         groups = dict(
             general=dict(grpheader='General Options', pkwargs={**basic_pkwargs}),
             data   =dict(grpheader='Data Arguments',  pkwargs=data_pkwargs),
@@ -187,7 +196,7 @@ class BasePred(ABC):
     @staticmethod
     def _get_pkwargs_for_class(cls): # fyi, making a classmethod here, gave issue since. 
         # it would get BasePred as class, did not find other fix
-        # pkwargs are the kwargs and the defaults of the prstools cli.
+        # pkwargs are the kwargs and the defaults of the prstools cli. 
         from prstools._parser_vars import get_subparserkwg_lst
         for elem in get_subparserkwg_lst():
             if elem['clsname'] == cls.__name__:
@@ -196,7 +205,7 @@ class BasePred(ABC):
     
     @classmethod
     def from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
-                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, pred='auto', regdef=None, 
+                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, rsidmode='auto', pred='auto', regdef=None, 
                                 command=None, **kwargs):
         try: from prstools.linkage import AutoLinkageData
         except: from prstools.linkage import RefLinkageData as AutoLinkageData
@@ -227,7 +236,7 @@ class BasePred(ABC):
             #model.remove_linkdata(); linkdata.clear_linkage_allregions # seems to do pretty much nothing.. anyway xp was 5% mem, which jumped to 20 and 60 later
             try: 
                 bed = prst.io.load_bed(target, verbose=verbose)
-                yhat = model.predict(bed); 
+                yhat = model.predict(bed, rsidmode=rsidmode); 
                 prst.io.save_prs(yhat, fn=out_fnfmt, verbose=verbose) # Store prediction result
             except Exception as e:
                 msg = (f"Could not generate prediction (e.g. plink file missing)" 
@@ -256,20 +265,37 @@ class BasePred(ABC):
         assert testsave and prstlogs, 'testsave must be enable at this point'
         from prstools.utils import AutoDict
         mname = cls.__name__.lower()
-        out_fnfmt = out + fnfmt
-        kwgkwg = {} if not 'kwargs' in kwg else kwg['kwargs']
+        og_out_fnfmt = out + fnfmt
+        kwgkwg = {} if not 'kwargs' in kwg else kwg['kwargs'] # The 'basenaming' here, makes os.path.basename() for complex paths.
         format_dt = AutoDict({key: cls.basenaming(item) for key, item in {**locals(), **kwg, **kwgkwg}.items()})
-        if 'ftype' in format_dt: format_dt.pop('ftype')
-        out_fnfmt = out_fnfmt.format_map(format_dt)
+        vanillakeys = ['ftype']
+        for elem in vanillakeys: format_dt[elem] = f'{{{elem}}}' # You can add rather vanilla things to this later.
+        try: out_fnfmt = og_out_fnfmt.format_map(dict(**format_dt))
+        except KeyError as e: raise ValueError(f'Unknown format key {{{e.args[0]}}}; choose from all these options: {", ".join(format_dt)}'
+            f'\nUnknown format key {{{e.args[0]}}} -->  Mind using format-keys {{}} in the output name is an advanced '
+            'and more complex feature. {sst},{target},{ref},{n_gwas},{pop} could be good candidates.'
+            ) from None
+        try: _ = og_out_fnfmt.format_map({key:'whatevv' for key in vanillakeys})
+        except KeyError as e: print(f'File prefix created with format-keys: {out_fnfmt.format_map(AutoDict(ftype=""))}')
         if testsave: # saving quick check, before lots of work is done
-            #out_fn = out_fnfmt.format(ext='tmp') +'.tmp'
+            #out_fn = out_fnfmt.format(ext='tmp') +'.tmp' # prst.utils.get_ip().embed()
             out_fn = out_fnfmt.format_map(dict(ftype='tmp')) #+ f'{np.random.randint(0,10**6):07}' + '.tmp'
+            dn = os.path.join(os.path.dirname(out_fn),'.')
+            cond = prst.utils.get_config().get('mkdir', None)
+            msg = (f"Cannot save file into a non-existent directory: '{dn}'. "
+                    "Use --mkdir (or -m) to create it automatically. Mind it can /make/multiple/dirs.")
+            if os.path.isdir(dn): cond=None # Dir exist so no processing needed in any case
+            if cond == True: 
+                os.makedirs(dn, exist_ok=True)
+                mkdirmsg = f'Directory did not exist and was created (--mkdir option is active): {dn} '
+                prst.warn(mkdirmsg, colour='yellow')
+            elif cond == False: raise OSError(msg)
             pd.DataFrame(['Currently being computed']) \
             .to_csv(out_fn, index=False, header=False);
             os.remove(out_fn) # briefly uncommented this to see doulbe slurm submission issue on mgh cluster.
         mainout_fn = out_fnfmt.format_map(dict(ftype=ftype))
         if os.path.isfile(mainout_fn):
-#             msg = f"\033[1;31mWARNING:\033[0m The file {mainout_fn} already exists! If this code finishes, it will be overwritten."
+            #msg = f"\033[1;31mWARNING:\033[0m The file {mainout_fn} already exists! If this code finishes, it will be overwritten."
             msg = f"\033[1;31mWARNING: {mainout_fn} already exists! If you let this code finish, it will be overwritten.\033[0m"
             #msg = f'WARNING: The file {mainout_fn} already exists! If this code finishes it will be overwritten.'
             warnings.warn(msg)
@@ -478,14 +504,14 @@ class BasePred(ABC):
             assert weights_df['xidx'].dtype == 'int64', 'xidx contained a nan, this should not happen for regular users, contact dev'
             weights_df = weights_df.sort_values('xidx')
             p_post = weights_df.shape[0]; n_missing = p_pre - p_post; perc = (n_missing/p_pre) * 100.
-            inject = ', which is acceptable for a lot of use-case (<10%)' if perc < 10 else ''
-            if perc > 30: inject=', which is a high missingness rate that can give suboptimal results.'
+            inject = ', which is acceptable for a lot of use-cases (<10%)' if perc < 10 else ''
+            if perc > 30: inject=', which is a high missingness rate that can give suboptimal results'
             if n_missing > 0: msg += f'\nMissing {n_missing:,} variants ({perc:.0f}%) in the target that are in the weights{inject}.'
             if n_missing > 0 and not self._allow_missing: raise RuntimeError(msg)
-        if self.verbose: print(msg)
+        if self.verbose or n_missing > 0: print(msg)
         
         # Loop through Genome:
-        yhat_dt = dict(); sst_dt = {}; X=None
+        yhat_dt = dict(); sst_dt = {}; X=None; self._msksumlst = []
         if len(weights_df['allele_weight'].shape) == 1: n_traits = 1
         else: n_traits = weights_df['allele_weight'].shape[1]  
         #for itr in self.get_iterator(range(n_iter), pbar=self.pbar)
@@ -504,7 +530,7 @@ class BasePred(ABC):
                 elif algo == 'i8fast':
                     if X is None: X = bed.read(index=np.s_[:,cxidx], dtype=dtype)
                     nsamp,_= X.shape
-                    X8 = bed.read(index=np.s_[:,cxidx], dtype='int8')
+                    X8 = bed.read(index=np.s_[:,cxidx], dtype='int8') # 17% -> 7k ukbafr run
                     mask = (X8 == -127)
                     m = X8.sum(axis=0).astype(dtype)
                     msksum = mask.sum(axis=0).astype(dtype)
@@ -515,13 +541,17 @@ class BasePred(ABC):
                         np.copyto(X, X8)
                     except: X = X8.astype(dtype)
                     for j in range(X.shape[1]): # <--- This one is faster!
-                        X[mask[:, j], j] = m[j]
+                        X[mask[:, j], j] = m[j] # 13% -> 7k ukbafr run
+                    self._msksumlst += [msksum]
                     # for i in range(X.shape[0]):
                     #     X[i, mask[i,:]] = m[mask[i,:]]
                 else: raise ValueError(f"Unknown algorithm: {algo}")
                 w = wchunk_df['allele_weight']; w=w if type(w) is pd.DataFrame else w.to_frame(name='prs')
                 if weight_type == 'standardized': w = s*w
-                yhat += X@w.values.astype(X.dtype) #chunk_df['allele_weight']
+                ## np.matmul(X, B, out=Y), looked promising. 50% reduction in execution speed was not possible afterall
+                ## Seemed the crucial difference was in Y[:] = X@B vs Y+= X@B of which the latter is faster
+                ## Yes, Again! float32 appears 2x faster, pretty much exactly. Perhaps a sum binning... is it needed?
+                yhat += X@w.values.astype(X.dtype) #chunk_df['allele_weight'] # 45% -> 7k ukbafr run
                 if trait_df is not None: # Compute beta marginal too if required
                     self._compute_sst_inside_pred(**locals())
 
@@ -531,6 +561,8 @@ class BasePred(ABC):
             if trait_df is not None: sst_dt[grp] = pd.concat(sst_lst, axis=0)
             yhat_dt[grp] = yhat
 
+        ## Also wondering if the yhat should be standardized to zero-one.. downstream applications?
+        ## Some missingness stats here by analyzing msksum could be cute.
         output = yhat if groupby is None else yhat_dt
         if localdump: output=locals()
         return output
