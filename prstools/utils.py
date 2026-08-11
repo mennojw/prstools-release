@@ -69,23 +69,62 @@ def warn(msg, category=UserWarning, stacklevel=2, colour=None, bold=False, **kwg
     msg = format_string(msg, colour=colour, bold=bold)
     warnings.warn(msg, category=category, stacklevel=stacklevel, **kwg)
     
-def plot_manhattan(data_df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323, palette='bright', aspect=4, s=6.,title='Manhattan plot', **snskwg):
+def plot_dataframe_all(df, maxrows=10_000, maxcols=50):
+    from IPython.display import display, HTML
+    with pd.option_context("display.max_rows", maxrows, "display.max_columns", maxcols):
+        msg = f'Whoops! Input {df.shape[0]=} which is larger than {maxrows=}'
+        if df.shape[0] > maxrows: prst.warn(msg, colour='yellow')
+        display(df)
+    
+def plot_manhattan(df, x=None, y='-logp', regcol='chrom', pvalmin=1e-323, pvalalwaysshow=1e-4, pvalsig=5e-8, 
+                   maxrows=1e6, palette='bright', aspect=4, s=6., title='Manhattan plot', **snskwg):
+    ## NOTE!: the hue colors make the manhattan plot slow to render, all the time is in plt.show() (lazy stuff)
+    ## potentially there could be faster ways. Take 10secconds to make the manhattan plot, 3 seconds without color
+    #tic, toc = prst.utils.get_tictoc()
+    # prep: 
+    assert maxrows > 10; maxrows = int(maxrows)
     import pandas as pd
     import numpy as np
     import seaborn as sns
     import matplotlib.pyplot as plt
     from prstools.io import compute_pvalbetase
-    data_df = data_df.reset_index(drop=True).reset_index()
-    if not '-logp' in data_df.columns:
-        if not 'pval' in data_df.columns:
-            data_df = compute_pvalbetase(data_df, calc_lst=['pval'], pvalmin=pvalmin)
-        data_df['-logp'] = -np.log10(data_df['pval'])
+    df = prst.io.validate_dataframe_select(df, select=['index'])
+    if not '-logp' in df.columns:
+        if not 'mlogp' in df.columns:
+            df = prst.io.get_mlogp(df)
+        df['-logp'] = df['mlogp']
     if x is None: x = 'index'
-    plot = sns.relplot(data=data_df, x=x, y=y, aspect=aspect, hue=regcol, palette=palette, legend=None, s=s, **snskwg)
-    chrom_df=data_df.groupby(regcol)[x].median()
-    plot.ax.set_xlabel(regcol); plot.ax.set_xticks(chrom_df); plot.ax.set_xticklabels(chrom_df.index)
+#     toc('starting compute')
+#     ind = df['mlogp'] >= -np.log10(pvalalwaysshow)
+#     acnt = ind.sum()
+#     # n_add = max(0, int(maxrows) - acnt) # skipping this step 4 workspeed, GTD
+#     idx = np.random.default_rng().choice(df.shape[0], min(maxrows,df.shape[0]), replace=False)
+#     ind[idx] = True
+    n_eff = int(df['n_eff'].max()) if 'n_eff' in df else None
+    
+    if maxrows+20 < df.shape[0]:
+        mlogp = df['mlogp']
+        idx = np.argpartition(mlogp, df.shape[0]-maxrows)[-maxrows:]
+        ind = df['mlogp'] == -1e99
+        ind[idx] = True
+        indsum = ind.sum()
+        inject = '1M' if np.isclose(maxrows,1e6) else f'{indsum:2.1e}'
+        df = df[ind]
+        inject2 = f"{df['mlogp'].min():.1f} ≤ -log(p) ≤ {df['mlogp'].max():.1f}"
+        if not ind.all(): title = title+f' (Quick-slice of Top {inject}, with {inject2} and {n_eff=:,})'
+    if x == 'index': df = df.reset_index(drop=True).reset_index()
+    if not regcol in df: 
+        regcol=None
+        msg = (f'The column \'{regcol}\' is not in the input sumstat dataframe so the manhatten plot'
+                ' will not get the pretty colors it normally gets (e.g. for the chromosome).')
+        prst.warn(msg, colour='green')
+    plot = sns.relplot(data=df, x=x, y=y, aspect=aspect, hue=regcol, palette=palette, legend=None, s=s, **snskwg)
+    if regcol is not None: chrom_df=df.groupby(regcol)[x].median()
+    if regcol is not None: plot.ax.set_xlabel(regcol); plot.ax.set_xticks(chrom_df); plot.ax.set_xticklabels(chrom_df.index)
+    plot.ax.axhline(-np.log10(pvalsig), ls='--', lw=1, c='grey', alpha=.8)
     plot.fig.suptitle(title)
-    plt.show()
+    plt.show() # 75% of compute time
+    #print(df.shape, df['mlogp'].min(), df['mlogp'].max())
     
 manhattan_plot = plot_manhattan
 
@@ -687,6 +726,7 @@ def _get_linksprst():
     ["snpdb_mini.tsv.gz", 'https://www.dropbox.com/scl/fi/q54612a8zs1guoo39xj2z/snpdb_mini.tsv.gz?rlkey=ujc60us9j4j0bzuctrh0fwgw3&st=d67dx3eo&dl=1', 
      'tiny snpdb_full used for build detection (~0.2M)'],
     ["snpdb_full.tsv.gz", 'https://www.dropbox.com/scl/fi/wujxo9rmwcfltoljx9hlc/snpdb_full.tsv.gz?rlkey=83mmcxwylff17h9k67xdz2zec&st=1dgiy1te&dl=1', 'SNP db with rsids & hg19+38 positions in 1kg (~0.93G)'],
+    ["hm3con.bim",        'https://www.dropbox.com/scl/fi/o9qj5an9jsehu6c8vf0y3/hm3con.bim?rlkey=c4n6nu0zxfqn3p1c7adax3pqm&st=r34eaho4&dl=1', 'The hapmap3 consensus snps in bim format (~59M)'],
     ["snpinfo_mult_1kg_hm3",  "https://www.dropbox.com/s/rhi806sstvppzzz/snpinfo_mult_1kg_hm3?dl=1", "1000G multi-ancestry SNP info (for PRS-CSx) (~106M)"],
     ["snpinfo_mult_ukbb_hm3", "https://www.dropbox.com/s/oyn5trwtuei27qj/snpinfo_mult_ukbb_hm3?dl=1", "UKBB multi-ancestry SNP info (for PRS-CSx) (~108M)"],
     ["ldblk_1kg_afr.tar.gz",  "https://www.dropbox.com/s/mq94h1q9uuhun1h/ldblk_1kg_afr.tar.gz?dl=1", "1000G AFR Population LD panel (~4.44G)"],
@@ -695,7 +735,7 @@ def _get_linksprst():
     ["ldblk_1kg_eur.tar.gz",  "https://www.dropbox.com/s/mt6var0z96vb6fv/ldblk_1kg_eur.tar.gz?dl=1", "1000G EUR Population LD panel (~4.56G)"],
     ["ldblk_1kg_sas.tar.gz",  "https://www.dropbox.com/s/hsm0qwgyixswdcv/ldblk_1kg_sas.tar.gz?dl=1", "1000G SAS Population LD panel (~5.60G)"],
     ["1kg_hm3.tar.gz",        "https://www.dropbox.com/scl/fi/0nn9za9wbg6n0ki3e6371/1kg_hm3.tar.gz?rlkey=7v1hqr4jnacvvfqv6jj13lcd2&st=yv4fcssd&dl=1",
-     "A 1kg plink dataset for hapmap3 snps with all pops (2.5K induv) (~348M)."],
+     "A 1kg plink dataset for hapmap3 snps with all pops (2.5K induv) (~348M)"],
     ["ldblk_ukbb_afr.tar.gz", "https://www.dropbox.com/s/dtccsidwlb6pbtv/ldblk_ukbb_afr.tar.gz?dl=1", "UKBB AFR Population LD panel (~4.93G)"],
     ["ldblk_ukbb_amr.tar.gz", "https://www.dropbox.com/s/y7ruj364buprkl6/ldblk_ukbb_amr.tar.gz?dl=1", "UKBB AMR Population LD panel (~4.10G)"],
     ["ldblk_ukbb_eas.tar.gz", "https://www.dropbox.com/s/fz0y3tb9kayw8oq/ldblk_ukbb_eas.tar.gz?dl=1", "UKBB EAS Population LD panel (~5.80G)"],
@@ -729,7 +769,7 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
     keeptar=False, # Keep the tar.gz files in the destdir. If this option is not given they will be deleted automatically to save space.
     **kwg
                    ):
-
+        
         # Defs & Inits:
         prstcfg = load_config()
         import tarfile, contextlib, pandas as pd
@@ -760,8 +800,10 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
             if prstdatadir is None: raise Exception('prstdatadir was not set in config! run prst config to set it')
             destdir = prstdatadir
         if not destdir: print('\n--destdir was not specified so download will not start.\n'); return True
-        if not os.path.isdir(os.path.expanduser(destdir)):
-            if mkdir: raise Exception(f'\nIt appears the supplied --destdir does not exist, please create: {destdir}')
+        destdir = os.path.expanduser(destdir)
+        if not os.path.isdir(destdir):
+            if mkdir: os.makedirs(destdir)
+            else: raise Exception(f'\nIt appears the supplied --destdir does not exist, please create: {destdir}')
 
         # Downloading:
         print(f'\nDownloading data, which might take some time. Data will be stored in: {destdir} \n')
@@ -772,19 +814,25 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
                                         ' therefore download & unpack is skipped. Remove directory for a redownload.'); lst+=[False]; continue
             download_tar(row['url'], dn=destdir); lst+=[True]
         links_df = links_df[lst]
-
+        
         # Untarring:
         print('\nFinished downloading all data. Now we need to unpack all the tar.gz files (takes some time to start):') 
         def untar_file(archive_path, destination):
+            tmpdest = os.path.join(destination,'.prstoolstmp') 
+            shutil.rmtree(tmpdest, ignore_errors=True)
+            if not os.path.exists(tmpdest): os.mkdir(tmpdest)
             with tarfile.open(archive_path, 'r:gz') as tar:
                 file_names = tar.getnames()
                 progress_bar = tqdm(total=len(file_names), 
                     ncols=120, colour='green', desc='Extracting')
                 for file in tar:
-                    tar.extract(file, destination)
+                    tar.extract(file, tmpdest)
                     progress_bar.update(1)
                     progress_bar.set_postfix(file=file.name)
                 progress_bar.close()
+            for elem in os.scandir(tmpdest):
+                shutil.move(elem.path, destination)
+            shutil.rmtree(tmpdest, ignore_errors=True)
 
         for idx, row in links_df.iterrows():
             curfn = row['filename']
@@ -1074,6 +1122,10 @@ class PRSTLogs(CycleDict):
     def finish(self):
         if hasattr(self, '_prstlogs_fn'):
             self.save()
+            
+def get_tictoc():
+    prstlogs = prst.utils.get_prstlogs()
+    return prstlogs.get_tictoc()
 
 # Global access function
 def get_prstlogs(): return PRSTLogs()

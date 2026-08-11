@@ -1,5 +1,5 @@
-__version__ = "0.0.70"
-_date = "17-07-2026"
+__version__ = "0.0.71"
+_date = "11-08-2026"
 
 import importlib as _importlib
 
@@ -38,6 +38,13 @@ _lazy_exports = {
     "save_fam": "prstools.io",
     "save_prs": "prstools.io",
     "save_sst": "prstools.io",
+    
+    # plot_*
+    "plot_manhattan":     "prstools.utils",
+    "plot_dataframe_all": "prstools.utils",
+    "plot_afscatters":    "prstools.linkage",
+    "plot_popbars":       "prstools.linkage",
+    "plot_popscatter":    "prstools.linkage",
     
     # And extras:
 	"merge_snps": "prstools.io",

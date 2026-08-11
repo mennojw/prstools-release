@@ -87,6 +87,11 @@ def validate_dataframe_n_eff(df, warn=True, must_exist=False):
          'not specified correctly.')
     return df
 
+def validate_dataframe_colsort(df):
+    corecols = get_conv_dt(flow='in').values()
+    sortcols = [col for col in corecols if col in df.columns] + [col for col in df.columns if not col in corecols]
+    return df[sortcols]
+
 def validate_dataframe_rsids(df, warn=True, minfrac=0.5, rsidmode=None):
     doit = False
     if rsidmode == 'auto': minfrac=0.5
@@ -103,12 +108,13 @@ def validate_dataframe_rsids(df, warn=True, minfrac=0.5, rsidmode=None):
 def validate_dataframe_select(df, select=None, **kwg):
     msg = 'The argument select was not properly set. This is required. options are ["index","A1A2","chrompos"]. Supply as list.'
     if select is None: raise ValueError(msg)
-    badsel = set(select) - set(["index","A1A2","chrompos","n_eff"])
+    badsel = set(select) - set(["index","A1A2","chrompos","n_eff","colsort"])
     if len(badsel) > 0: raise ValueError(f'bad selection: {badsel} <--'+msg)
     if 'index'    in select: df = validate_dataframe_index(df,**kwg)
     if 'A1A2'     in select: df = validate_dataframe_A1A2(df,**kwg)
     if 'chrompos' in select: df = validate_dataframe_chrompos(df,**kwg)
     if 'n_eff'    in select: df = validate_dataframe_n_eff(df,**kwg)
+    if 'colsort'  in select: df = validate_dataframe_colsort(df,**kwg)
     return df
 
 def validate_dataframes_premerge(df0,df1):
@@ -265,6 +271,13 @@ def get_liftoverpositions(df, *, bldout, bldin=None, sort=False, inplace=False, 
         warnings.warn(msg)
     return df
 
+def get_hm3con(process=None):
+    assert process in [None,'soma']
+    fn = prst.utils.validate_path(fn='hm3con.bim', handle_prstdatadir='only')
+    hm3con, _ = prst.load_bimfam(fn, fam=False)
+    if process == 'soma': hm3con = hm3con[hm3con['chrom'].isin(range(1,23))].reset_index(drop=True)
+    return hm3con
+
 _snpdb_dt = dict()
 def get_snpdb(snpdb_df='mini', cache_vars=('mini',)):
     global _snpdb_dt
@@ -350,6 +363,19 @@ def get_rsids(df, *, snpdb_df='full', bld='detect', verbose=True, inplace=False,
     mcnt = (~mrg['snp'].isna()).sum()
     if verbose: print(f'-> Added rsids to the input ({mcnt:,} rsids covering {(mcnt/mrg.shape[0])*100:.2f}% of total input rows)')
     return mrg
+
+def get_maf(df, redo=False, icol='af_A1', tcol='maf'):
+    if not tcol in df.columns or redo:
+        df[tcol] = 0.5 - (df[icol] - 0.5).abs()
+    return df
+
+def get_mlogp(df, redo=False, pvalmin=1e-323):
+    if not 'mlogp' in df.columns:
+        prst.warn('Creating a minus log pval, by using mlogp function. This is still in alpha. Contact dev.')
+        if not 'pval' in df.columns:
+            df = compute_pvalbetase(df, calc_lst=['pval'], pvalmin=pvalmin)
+        df['mlogp'] = -np.log10(df['pval'])
+    return df
 
 def get_AX(df, opt=1, redo=False):
     df = validate_dataframe_index(df)
@@ -751,14 +777,17 @@ def naninfslicer_funct(start_df, cols, inf=False, verbose=False, ispretest=False
 
 def compute_pvalbetase(df, *, calc_lst=['pval','beta','se_beta'], pvalmin=1e-323, copy=True, pretest=False, slicenaninfs=False, verbose=False):
     assert slicenaninfs == False
+    prst.warn('Creating a pval/beta/beta_se, using compute_pevalbetase() function. This function is still in alpha. Contact dev.')
     if copy: df=df.copy()
     if 'pval' in calc_lst: df['pval'] = 2*sp.stats.norm.cdf(-abs(df.beta_mrg)*np.sqrt(df.n_eff))
     if 'beta' in calc_lst: df['beta'] = df['beta_mrg']/df['std_sst'] # assumption var[y] ==1 !
     if 'se_beta' in calc_lst:   df['se_beta']   = 1/(np.sqrt(df.n_eff)*df['std_sst'])# assumption var[y] ==1
     if pvalmin:
-        df.loc[df.pval <= pvalmin,'pval'] = pvalmin
-        warnings.warn(f'Small values were detected in the p-values, padding with small non-zero values (={pvalmin}).'
-                      ' This likely leads to suboptimal performance. Use beta and se sumstat columns instead for better performance')
+        ind = df.pval <= pvalmin
+        df.loc[ind,'pval'] = pvalmin
+        if ind.sum() > 0:
+            prst.warn(f'Small values were detected in the p-values, padding with small non-zero values (={pvalmin}).'
+                ' This likely leads to suboptimal performance. Use beta and se sumstat columns instead for better performance', colour='yellow')
         assert np.sum(df.pval < pvalmin) == 0
     return df
 
@@ -932,6 +961,7 @@ def _validate_kwg_load_fun(fn, *, load_fun, ukwg_lst=None, **kwg): ## keep close
         ' pyarrow which makes loading slower. Remove comment section if you need faster loading.')
     ukwg_lst = [
         {},
+        dict(compression='gzip', swmsg='Appling decompression gzip on sumstat for loading, probably .bgz extension..'),
         dict(comment="#", pyarrow=False, swmsg=swmsg0)
     ] if ukwg_lst is None else ukwg_lst
     
@@ -949,18 +979,20 @@ def _validate_kwg_load_fun(fn, *, load_fun, ukwg_lst=None, **kwg): ## keep close
                                                     # Mind for addrids (this should not set with --addrids in code)
 def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_mrg=True, n_gwas=None, n_eff_handling='topmedian', delimiter=None, chrom=None, comment=None,
              reqcols=['snp','A1','A2',('beta','oddsratio'),('pval','se_beta')], pyarrow=True, pretest=True, check=True, slicenaninfs=True, validate=True, verbose=True, 
+             compression='skip',
              nrows=None, testnrows=100, ispretest=False, cli=False, readkwg=None): # do not change pretest
 
     # Hey! I take about 7 seconds on 20M snps with Pyarrow, Optimal enough for now,
     # -> get_beta_mrg takes 60% (np.sort() part takes 40% of that, speedup possible) , and read_csv takes 30% and appears effient already
     # Preps & Pretest:
+    _read_csv_kwg_lst = ['nrows', 'comment', 'compression'] # Hardcoded list of vars + delim & **readkwg that will goto pd.read_csv
     if not addcols: addcols=[]
     if readkwg is None: readkwg = {}
     if type(addcols) is str: addcols = [addcols]
     if delimiter == r'\s+': pyarrow=False
     if verbose: print(f'Loading sumstat file.', end='')
     if pretest: # Pre-test: This can become a self call (shorter test run)
-        pretestkwg = {key: item for key,item in locals().items() if not key in ['sst_fn']}
+        pretestkwg = {key: item for key,item in locals().items() if not (key in ['sst_fn'] or key.startswith('_'))}
         pretestkwg.update(verbose=False, ispretest=True, nrows=testnrows, pretest=False)
         ukwg = _validate_kwg_load_fun(sst_fn, load_fun=load_sst, **pretestkwg)
         if 'pyarrow' in ukwg: pyarrow=ukwg.pop('pyarrow') # <-- this could become a full load_sst() call later
@@ -970,7 +1002,8 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
     kwg = dict()
     if pyarrow and nrows is None: kwg.update(get_pyarrow_prw())
     kwg['delimiter'] = '\t' if delimiter is None else delimiter
-    for k in ['nrows', 'comment']: kwg[k] = locals()[k]
+    for k in _read_csv_kwg_lst: 
+        if not locals()[k] == 'skip': kwg[k] = locals()[k]
     kwg.update(ukwg); kwg.update(readkwg)
 
     # Loading
@@ -1000,9 +1033,9 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
                       n_eff_handling=n_eff_handling, slicenaninfs=slicenaninfs, verbose=verbose, cli=cli)
     
     if validate: 
-        sst_df = validate_dataframe_index(sst_df, warn=False)
-        sst_df = validate_dataframe_select(sst_df, select=['A1A2','chrompos', 'n_eff'], warn=False if ispretest else True)
-        _      = validate_dataframe_rsids(sst_df, warn=False if ispretest else True, rsidmode='no')
+        sst_df = validate_dataframe_index(sst_df, warn=False); dowarn = False if ispretest else True
+        sst_df = validate_dataframe_select(sst_df, select=['A1A2','chrompos', 'n_eff'], warn=dowarn)
+        _      = validate_dataframe_rsids(sst_df, warn=dowarn, rsidmode='no') # this is only a warn for few rsid being present
     else: warnings.warn('load_sst function was set to validate=False. This can lead to bad results.')
     if addcols: sst_df = get_cols(sst_df, addcols=addcols)
     if addrsids and not ispretest:
@@ -1014,6 +1047,7 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
             ' a snp column will be added. This might take quite some time and memory.')
             if verbose: print(msg)
             sst_df = get_rsids(sst_df)
+    if validate: sst_df = validate_dataframe_colsort(sst_df)
 
     return sst_df
 
@@ -1434,7 +1468,8 @@ def check_regdef(regdef_df, allow_overlap=False, verbose=False):
         assert (df['start'].values[1:] >= df['stop'].values[:-1]).all(), msg
     if verbose: print('regdef_df is valid! (i.e. required cols, sorted, unique regids, and no overlapping regions)')
 
-def load_regdef(regdef='ldgm-all-hg38', fnfmt='./data/defs/regdef/{regdef}.regdef.tsv', check=True, verbose=True):
+def load_regdef(regdef, fnfmt='./data/defs/regdef/{regdef}.regdef.tsv', check=True, verbose=True):
+#     'ldgm-all-hg38'
     curdn = os.path.dirname(prst.__file__)
     fnfmt = os.path.join(curdn, fnfmt)
     fn = fnfmt.format(regdef=regdef)
@@ -1494,7 +1529,7 @@ def load_example(dn='./data/_example/', n_gwas=2565, pop='EUR', verbose=False):
 def _pd_to_atomizer(*, to_file, fn, **kwg):
     bn = os.path.basename(fn)
     dn = os.path.dirname(fn) or "."
-    tmp_fn = os.path.join(dn,f".{bn}.incomplete.{uuid.uuid4().hex[:16]}")
+    tmp_fn = os.path.join(dn,f".incomplete.{uuid.uuid4().hex[:16]}.{bn}")
     try:
         ret = to_file(tmp_fn, **kwg)   # ← error happens here
         os.replace(tmp_fn, fn)
@@ -1539,7 +1574,7 @@ def save_sst(sst_df, fn=None, return_sst=False, ftype='tsv', basecols=None, addi
     conv_dt = prst.io.get_conv_dt(flow='out')
     preout_df = sst_df.rename(columns=conv_dt)
     avail_outcols = [col for col in outcols if col in preout_df.columns]
-    if verbose: print(f'Prepping sumstat, with selection of available columns: {", ".join(avail_outcols)}')
+    if verbose: print(f'Prepping {preout_df.shape[0]:,} variant sumstat, with selection of available columns: {", ".join(avail_outcols)}')
     if verbose: print(f'Saving sumstats to: {fn}', end=' ')
     out_df = preout_df[avail_outcols]
     if nancheck: assert out_df.isna().sum().sum()==0, 'NaN detected in sst dataframe, cannot save sst file with NaNs if nancheck=True'
