@@ -33,7 +33,7 @@ included in python3.8+). If the command above does not work directly you
 can install using `conda` (or `mamba` if you have that), by running
 `conda install "python>=3.9"`. For other install issues please check the
 [install
-guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/00_install_guide.ipynb)
+guide](https://prstools.readthedocs.io/en/latest/guides/install_guide.html)
 or send us a mail.
 
 ## How to use
@@ -41,7 +41,7 @@ or send us a mail.
 Immediately after installing `prstools`, it should be possible to
 download & run the demo example (~4mb), by pasting the following into
 the commandline (if not see [install
-guide](https://github.com/mennojw/prstools-release/blob/main/tutorials/00_install_guide.ipynb)):
+guide](https://prstools.readthedocs.io/en/latest/guides/install_guide.html)):
 
 ``` bash
 # Makes 'example' dir with data in current path:
@@ -122,12 +122,12 @@ usage, which should work with a simple copy-paste. <br> <br>
 
 For more information and a hands on demonstration of what `prstools` can
 do have a look at the [Getting Started
-Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
+Tutorial](https://prstools.readthedocs.io/en/latest/tutorials/getting_started.html).
 There is also a [Video](https://youtu.be/BP1zUBFH2l8). The
 tutorial+video is a tiny bit older than the current `prstools` version,
 which has more functionality. You can load the tutorial in a free cloud
 instance by clicking here: [![Google
-Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb).
+Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mennojw/prstools-release/blob/main/docs/tutorials/getting_started.ipynb).
 
 ## Contact
 
