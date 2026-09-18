@@ -61,7 +61,7 @@ def validate_dataframe_A1A2(df, warn=True, must_exist=False):
         head = df.head(200)
         if any(head[col].str.contains('[atcg]').any() for col in ['A1','A2']):
             msg = 'Lower case a,t,c,g letters found in A1 & A2. Casting them to upper-case.'
-            if warn: warnings.warn(msg)
+            if warn: prst.warn(msg, colour='blue')
         df["A1"] = df["A1"].str.upper()
         df["A2"] = df["A2"].str.upper()
     return df
@@ -156,7 +156,7 @@ def get_fn_trimmed(fn, make_bn=True, exts=['.prstweights.tsv','.legacyweights.ts
             return fn[:-len(ext)]
     return fn
 
-def get_diagnostics(df, verbose=True, allchecks=False):
+def get_diagnostics(df, verbose=True, allchecks=False, show=True):
     assert all(col in df.columns for col in ['A1','A2']), 'Input frame does have to have A1 and A2 columns!'
     if verbose: print(f'{verbose=} and verbose is True by default. And frame has A1 and A2')
     df = get_AX(df)
@@ -890,7 +890,8 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
             df.loc[:,'beta_mrg'] = df.beta*pre_std_sst # There is a funny order here 4 speed
             std_y = np.sqrt(0.5)/np.median(np.partition(pre_std_sst, -k)[-k:])
             df['std_sst'] = std_y * pre_std_sst
-            df.std_y = std_y # Saving it here incase its needed later on at some point.
+            #df.std_y = std_y # Saving it here incase its needed later on at some point.
+            df.attrs['std_y'] = std_y
             msg = f'Computed beta marginal (=X\'y/n) from sumstat using beta and its standard error and sample size (n_eff={int(n_eff_msg)}).'; 
             df.attrs['msg']=msg
             if verbose and not cli: print(msg)
@@ -902,6 +903,12 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
                               ' which can lead to suboptimal performance. Use beta and se sumstat columns instead for better performance')
                 assert np.sum(df.pval == 0) == 0
             df.loc[:,'beta_mrg'] = np.sign(df.beta)*np.abs(sp.stats.norm.ppf(df.pval/2.0))/np.sqrt(n_eff) 
+            # Disabling the following part, cause beta can be close to zero making it unreliable/give nans:
+            #pre_std_sst = df['beta_mrg']/df['beta']; k=int(len(pre_std_sst) * 0.02); k=max(k,1) # some tricks to get std_sst
+            #std_y = np.sqrt(0.5)/np.nanmedian(np.partition(pre_std_sst, -k)[-k:])
+            #df['std_sst'] = std_y * pre_std_sst # A nan ready version will be made for get_diagnostics and pop detection.
+            #df.attrs['std_y'] = std_y
+            #df.std_y = std_y # Saving it here incase its needed later on at some point.
             msg = f'Computed beta marginal (=X\'y/n) from sumstat using p-values and the sign of beta and sample size (n_eff={int(n_eff_msg)}).';  #df.msg=msg
             df.attrs['msg']=msg
             if verbose and not cli : print(msg)
@@ -979,7 +986,7 @@ def _validate_kwg_load_fun(fn, *, load_fun, ukwg_lst=None, **kwg): ## keep close
                                                     # Mind for addrids (this should not set with --addrids in code)
 def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_mrg=True, n_gwas=None, n_eff_handling='topmedian', delimiter=None, chrom=None, comment=None,
              reqcols=['snp','A1','A2',('beta','oddsratio'),('pval','se_beta')], pyarrow=True, pretest=True, check=True, slicenaninfs=True, validate=True, verbose=True, 
-             compression='skip',
+             compression='skip', msg0='Loading sumstat file.',
              nrows=None, testnrows=100, ispretest=False, cli=False, readkwg=None): # do not change pretest
 
     # Hey! I take about 7 seconds on 20M snps with Pyarrow, Optimal enough for now,
@@ -990,7 +997,7 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
     if readkwg is None: readkwg = {}
     if type(addcols) is str: addcols = [addcols]
     if delimiter == r'\s+': pyarrow=False
-    if verbose: print(f'Loading sumstat file.', end='')
+    if verbose: print(f'{msg0:<23}', end='')
     if pretest: # Pre-test: This can become a self call (shorter test run)
         pretestkwg = {key: item for key,item in locals().items() if not (key in ['sst_fn'] or key.startswith('_'))}
         pretestkwg.update(verbose=False, ispretest=True, nrows=testnrows, pretest=False)
@@ -1008,7 +1015,7 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
 
     # Loading
     orisst_df = _pd_read_csv(sst_fn, **kwg) # 60% of time
-    if verbose: print(f'   -> {orisst_df.shape[0]:>12,} variants sumstat loaded.')
+    if verbose: print(f' -> {orisst_df.shape[0]:>12,} variants loaded.')
 
     # Checks: This part should do all the reqcol checks...
     # now this logic is spread out all over load_sst related functions
@@ -1241,7 +1248,8 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', cmap=True, d
 
     bim_df = pd.read_csv(base_fn + '.bim', delimiter=delimiter, header=None, nrows=nrows,
                          names=['chrom', 'snp', 'cm', 'pos', 'A1', 'A2'], **prw) if bim else None
-    if type(bim_df) is pd.DataFrame and add_xidx: bim_df['xidx'] = bim_df.index
+    # Next line needs to be before any slicing! because it used for plink bedfile indexing
+    if type(bim_df) is pd.DataFrame and add_xidx: bim_df['xidx'] = bim_df.index 
     if bim: n_snps_start=bim_df.shape[0]
 
     fam_df = pd.read_csv(base_fn + '.fam', delimiter=r'\s+', header=None,  nrows=nrows,
@@ -1269,7 +1277,6 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', cmap=True, d
         if not ispretest and rsidmode:
             bim_df = prst.io.validate_dataframe_rsids(bim_df, rsidmode=rsidmode)
             
-        
     if verbose:
         lst=[]
         if bim: inject = f', selecting {n_snps_end:,} with chrom={chrom}' if 'ind' in locals() and ind.shape != bim_df.shape[0] else ''
@@ -1343,7 +1350,7 @@ def _load_bimfam_from_srd(srd, make_bimfam_attrs=True, verbose=False, skipifpres
 
     return bim_df.copy(), fam_df.copy()
 
-def load_ref(ref_fn, chrom=None, verbose=False, rename_dt=dict(maf='maf_ref',af_A1='af_A1_ref'), reset_index=True):
+def load_ref(ref_fn, chrom=None, verbose=False, rename_dt=dict(maf='maf_ref', af_A1='af_A1_ref'), reset_index=True):
     chrom = None if (chrom=='*' or str(chrom).lower()=='all') else chrom
     if verbose: print('Loading reference file.', end='')
     ref_df = load_sst(ref_fn, n_gwas=None, calc_beta_mrg=False, check=False, verbose=False)
@@ -1355,6 +1362,15 @@ def load_ref(ref_fn, chrom=None, verbose=False, rename_dt=dict(maf='maf_ref',af_
     if reset_index:
         ref_df = validate_dataframe_index(ref_df, warn=False)
     return ref_df
+
+def load_refset(refset, rename_dt=dict(), add_rfsidx=True, verbose=False):
+    # refset example: 'snpinfo_mult_1kg_hm3'
+    refset = prst.utils.validate_path(refset=refset, handle_prstdatadir='allow');
+    refset_df = prst.load_sst(refset, calc_beta_mrg=False, reqcols=['snp','A1','A2'], n_gwas=False, 
+                msg0='Loading multi-population reference file.')
+    refset_df = refset_df.rename(columns=rename_dt)
+    if add_rfsidx: refset_df['rfsidx'] = np.arange(refset_df.shape[0])
+    return refset_df
 
 def load_snpdb(snpdb_df='mini'):
     assert type(snpdb_df) is str, f'Input to load_snpdb must be string, it is {type(snpdb_df)}'
@@ -1408,7 +1424,7 @@ def load_bed(fn, make_bimfam_attrs=True, countA12correct=True, verbose=False, st
     fn = prst.utils.validate_path(fn=fn, must_exist=False)
     iid_count=None; sid_count=None
     if make_bimfam_attrs:
-        bim_df, fam_df = prst.load_bimfam(fn,add_xidx=True, add_AX=True)
+        bim_df, fam_df = prst.load_bimfam(fn, add_xidx=True, add_AX=True)
         iid_count=fam_df.shape[0]; sid_count=bim_df.shape[0] 
     base_fn = '.'.join(fn.split('.')[:-1]) if (fn.split('.')[-1] in ('bim','fam','bed')) else fn
     bed = open_bed(base_fn+'.bed', iid_count=iid_count, sid_count=sid_count)

@@ -25,6 +25,7 @@ cd "$ORIG_DIR"
 pip install -e ./ # Important, else it might grab anotherin install
 rsync -auv --exclude='.git/' --exclude-from='.gitignore' --existing ../prstools/ ./
 cd ./prstools  # ok the order of all this seems funny, but im not gonna change it for now
+rm ./_parser_vars.py # Remove the old parser-vars and redo them (incase it was copied) add "-f" for fault tolerant
 python ./_cmd.py --dev-secret # !!!ahh yess, to not have all the alpha code references. 
 
 # Commiting and push to github & pypi

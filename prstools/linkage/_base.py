@@ -493,6 +493,11 @@ class GenotypeLinkageData():
     
 class _DiagnosticsPlusPlotting4LinkageData():
     
+    def get_diagnostics(self, *args, **kwargs):
+        sst_df = self.get_sumstats_cur()
+        out = prst.io.get_diagnostics(sst_df)
+        return out
+    
     def plot_manhattan(self, *args,**kwargs):
         sst_df = self.get_sumstats_cur()
         prst.utils.plot_manhattan(sst_df, *args, **kwargs)
@@ -509,6 +514,8 @@ class BaseLinkageData():
     _cross_chrom_ld = False
     _save_s2sst = True
     _npd_cnt = 0
+    _copy_attrs = ['_align_ready','pop']
+    _align_ready = None
 
     def __init__(self, *, sst_df=None, regdef_df=None, clsattr_dt=None, #There should be sst_df or clsattr_dt
                  
@@ -616,8 +623,8 @@ class BaseLinkageData():
             if hasattr(self, '_copy_attrs'):
                 if k in self._copy_attrs:
                     setattr(new_obj, k, v)
-            elif not k == '_kwg_dt':
-                setattr(new_obj, k, v)
+            elif not k == '_kwg_dt': # Probably doing the _kwg_dt exclusion because with ...
+                setattr(new_obj, k, v) # get_params these were already
         return new_obj
 
     ###########################
@@ -830,6 +837,9 @@ class BaseLinkageData():
                 D=self.get_specified_data_region(i=i, varname=varname.rstrip('s'), checkdims=False)
                 bidx = sst_df['bidx'] if 'bidx' in sst_df.columns else np.arange(len(D)) # This will fail if D and sst_df dont match in dims
                 preDs = D[bidx][:,bidx]; info=False
+                if 'ldflip' in sst_df:
+                        ldflip = sst_df['ldflip'].to_numpy()
+                        preDs *= np.outer(ldflip, ldflip)
                 Ds, info = prst.io.validate_linkage(preDs, return_info=True) if self._validate_linkage else preDs
                 if info: self._npd_cnt = self._npd_cnt + 1 # Like this to prevent class attribute to get used (not +=)
                 #msg = 'Non posidefinite LD matrices detected, applying correction.'
@@ -1092,6 +1102,12 @@ class BaseLinkageData():
                 self.retrieve_sumstats_region(i=i)
             return self.reg_dt[i]['beta_mrg']
         
+        def get_pop(self, allow_none=True):
+            ret = getattr(self,'pop', None)
+            msg = 'pop=None and the linkagedata object is set such that is not allowed as output of .get_pop()'
+            if not allow_none and ret is None: raise RuntimeError(msg)
+            return ret
+        
         @property
         def shape(self):
             return (self.n_snps_total, len(self.reg_dt.keys()))
@@ -1125,14 +1141,17 @@ class BaseLinkageData():
 
         return self
     
-    def set_population(self, pop):
-        assert type(pop) is str
-        self.pop = pop.upper()
+    def set_pop(self, pop, allow_none=True):
+        msg = f'pop input must be of type string not {type(pop)}'
+        if pop is None and not allow_none: assert type(pop) is str, msg
+        assert type(pop) is str or pop is None, msg
+        if type(pop) is str: pop = pop.upper()
+        self.pop = pop
         return self
-    
 
 class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
-    
+    #_copy_attrs (in base)
+    _align_ready = True
     uncache=True
     _extradropdupcols = ['i','bidx', 'blkid'] 
     def get_extradropdupcols(self):
@@ -1197,7 +1216,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         if verbose: print('-> Done')
 
     @classmethod # from_ref calls all need to mimic eachother to make cls(**kwg) work. could put a **kwg in cls.__init__ but that has other issues.
-    def from_ref(cls, ref, sst_df=None, chrom='all', return_locals=False, reg_bn='snpregister.tsv', storetype='prscs', verbose=True, regdef=None, bld=None, out_fnfmt=None, **kwg):
+    def from_ref(cls, ref, sst_df=None, chrom='all', pop=None, return_locals=False, reg_bn='snpregister.tsv', storetype='prscs', verbose=True, regdef=None, bld=None, out_fnfmt=None, **kwg):
         ref = prst.utils.validate_path(ref=ref, must_exist=True, handle_prstdatadir='allow', verbose=False)
         assert os.path.isfile(ref), f'It seems that variable ref (={ref}) is not a file. This mean something went really wrong in the software. please contact dev.'
         msg = f'Trying to use ref={ref} as a reference, which is probably a plink bed file. However currently exectured code is meant for standard prscs references only (e.g. ldblk_1kg_afr directory).'
@@ -1217,7 +1236,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         ref_df = prst.io.load_ref(reg_fn, chrom=chrom, verbose=verbose) ## <--- here the magic for chrom slicing takes place..
         if not 'check' in kwg: kwg['check']=False
         params = inspect.signature(cls.__init__).parameters.keys() - 'self'
-        self = cls(**{k:v for k,v in kwg.items() if k in params})
+        self = cls(**{k:v for k,v in kwg.items() if k in params}).set_pop(pop)
         chrom_fn_dt={}
         for chrom in ref_df['chrom'].unique():
             lst = glob.glob(os.path.join(ref_dn,f'*chr{chrom}.hdf5'))
@@ -1241,19 +1260,20 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
     
     @classmethod
     def from_cli_params(cls, *, ref, target, sst, n_gwas=None, chrom='*', verbose=False, colmap=None, pop=None, cli=True, rsidmode='auto',
-                        sstrename_dt=dict(maf='maf_sst',af_A1='af_A1_sst'), **kwg): 
+                        sstrename_dt=dict(maf='maf_sst',af_A1='af_A1_sst'), align_df=None, **kwg): 
         # Basic checks:
         tic,toc = prst.utils.get_prstlogs().get_tictoc()
         if target is not None: tsttarget = '.'.join(target.split('.')[:-1])+'.bim' if (target.split('.')[-1] in ('bim','fam','bed')) else target+'.bim'
         else: tsttarget=None # Im using tsttarget to test if it exist as a .bim file, but not have it as a validated output 'target' in which case a 1kg-ref.bim could overwrite (unlikely)
         ref, sst, tsttarget = prst.utils.validate_path(ref=ref, sst=sst, tsttarget=tsttarget, must_exist=True, handle_prstdatadir=['allow',False,False], verbose=verbose)
-        msg=f'Population argument specified (pop={pop}), but for this approach this information is currently not used.'
-        if pop is not None and pop != 'pop': warnings.warn(msg)
+        #msg=f'Population argument specified (pop={pop}), but for this approach this information is currently not used.'
+        #if pop is not None and pop != 'pop': warnings.warn(msg)
         
         # Loading & validation:
         orisst_df    = prst.load_sst(sst, calc_beta_mrg=True, n_gwas=n_gwas, colmap=colmap, verbose=verbose, cli=cli)
         target_df, _ = prst.load_bimfam(target, fam=False, rsidmode=rsidmode, chrom=chrom, start_string='Loading target file.    ', verbose=verbose) if target else (None,None)
-        linkdata     = cls.from_ref(ref, chrom=chrom, verbose=verbose, sst_df=orisst_df, **kwg)
+        linkdata     = cls.from_ref(ref, chrom=chrom, verbose=verbose, sst_df=orisst_df, pop=pop, **kwg)
+        linkdata     = linkdata if align_df is None else linkdata.align(align_df)
         ref_df       = linkdata.get_sumstats_cur()
         msg = (f'\033[1;31mWARNING: The size of the reference (={ref_df.shape[0]} snps) is much smaller than the sumstat (={orisst_df.shape[0]} snps). '
                'Are you sure you are using the right reference and not the reference example?\033[0m')
@@ -1261,7 +1281,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         msg = f'A sumstat of size {orisst_df.shape[0]:,} is quite small! Most have 100K+ variants.'
         if ref_df.shape[0] > 1e4 and orisst_df.shape[0] < 1e5: prst.warn(msg, colour='yellow')
         orisst_df.rename(columns=sstrename_dt, inplace=True)
-        target_df = prst.io.validate_dataframe_rsids(target_df, rsidmode=rsidmode)
+        if target: target_df = prst.io.validate_dataframe_rsids(target_df, rsidmode=rsidmode)
 
         # Matching:
         if verbose: print('Matching sumstat & reference ', end='', flush=True)
@@ -1275,7 +1295,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
                           (f'target ({(n_match/max(target_df.shape[0],1))*100:.1f}% incl.) and ' if target else 'and ') +
                            f'sumstat ({(n_match/max(orisst_df.shape[0],1))*100:.1f}% incl.).')
         if verbose: print(msg)
-        msg = (f'The matching percentage of the reference is below 30% (It\'s {reffrac*100:.1f}%).'
+        msg = (f'The matching percentage with the LD reference is below 30% (It\'s {reffrac*100:.1f}%).'
                 ' This might indicate an issue, since most modern sumstats will have 80%+.')
         if reffrac < 0.3: prst.warn(msg, colour='yellow')
          # generate spacing between loading and fit()
@@ -1292,6 +1312,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         assert extradropdupcols == 'auto', 'only avail option atm is \'auto\'' 
         assert drop is True
         assert check is True
+        self._align_ready = False
         ddups = self.get_extradropdupcols()
         if flipcols == 'auto':
             flipcols = [col for col in sst_df.columns if col in ['beta','beta_mrg', 'allele_weight']]
@@ -1321,6 +1342,7 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         return flinkdata
     
     def xs(self, keys, on='i', sort=True, makecopy=True):
+        self._align_ready = False
         assert on=='i', "For now only i is allowed for linkdata slicing/ xs\'ing"
         assert sort is True, 'atm input keys and all stuff needs to be sorted'
         assert makecopy is True, 'assuming copy only for now'
@@ -1339,11 +1361,40 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
             geno_dt['sst_df'] = df
             geno_dt.pop('beta_mrg', None)
             nreg_dt[i_new] = geno_dt
-        newlinkdata = self.clone()
+        newlinkdata = self.clone() ## .clone() method needs some work!
         newlinkdata.reg_dt = nreg_dt
         return newlinkdata
+    
+    def align(self, align_df, on=['snp','AX'], extracols=['rfsidx'], inplace=False): # <-- This badboi can only be executed before merges
+        if self._align_ready == None: raise NotImplementedError('align() not implemented for this class')
+        elif not self._align_ready: raise RuntimeError('The linkagedata object was already .xs() or .merg'
+            'ed() or even .align() so can not be aligned anymore, this need to happen in the beginnign')
+        cols = [col for col in align_df.columns if col in (on + ['A1','A2'] + extracols)]
+        sst_df = self.get_sumstats_cur()
+        # The .copy() on  the next line is needed to not get annoying pandas copywarnigns
+        new_df = prst.merge_snps(align_df[cols].copy(), sst_df, on=on, flipcols=[], handle_missing='filter', allow_right_filter=False)
+        new_df = new_df.rename(columns=dict(rflip='ldflip'))
+        new_sst_df = prst.io.validate_dataframe_index(new_df)
+        new_sst_df['idx'] = new_sst_df.index # not sure what i put this in again, explain please
+        nreg_dt = {}
+        for i_new, (i_old, df) in enumerate(new_sst_df.groupby('i', sort=True)):
+            geno_dt = self.reg_dt[i_old]
+            if not inplace: 
+                df = df.copy()
+                geno_dt = copy.deepcopy(geno_dt)
+            df['i'] = i_new
+            geno_dt['sst_df'] = df
+            geno_dt.pop('beta_mrg', None)
+            nreg_dt[i_new] = geno_dt
+        flinkdata = self if inplace else self.clone()
+        flinkdata.reg_dt = nreg_dt
+        return flinkdata
         
-    def groupby(self, by=None, sort=True, warndupcol=True, skipempty=True, needmerge=None):
+#         try: new_df = prst.merge_snps(sst_df, align_df, on=on, handle_missing=False, flipcols=[])
+#         except Exception as e: raise e
+        
+    def groupby(self, by, sort=True, warndupcol=True, skipempty=True):
+        needmerge=None
         assert skipempty, 'Only option is to skip the empty groupbys for now.'
         import time, itertools
         sst_df = self.get_sumstats_cur()
@@ -1353,15 +1404,19 @@ class RefLinkageData(BaseLinkageData, _DiagnosticsPlusPlotting4LinkageData):
         if needmerge is None: needmerge = any(s1 & s2 for (i, s1), (j, s2) in itertools.combinations(enumerate(sets), 2))
         for grp, cdf in groupings:
             if needmerge:
+                msg = 'Because of the groupby selection on the linkagedata being more complicated then normal this can take some '+\
+                      'extra compute time, because it requires linkdata.merge operation.'
+                prst.warn(msg, colour='yellow')
                 nlink = self.merge(cdf.reset_index(), warndupcol=warndupcol, dropalldupcols=True, inplace=False)
             else:
                 keys=np.sort(cdf['i'].unique())
                 nlink = self.xs(keys, on='i')
             if len(nlink.get_i_list()) > 0: yield grp, nlink
-            else: warnings.warn(f'Grouping by {by} specifically for {by}={grp} led to an empty LD + sumstat (i.e. not data), so skipping {by}={grp}')
+            else: prst.warn(f'Grouping by {by} specifically for {by}={grp} led to an empty LD + sumstat (i.e. not data), so skipping {by}={grp}', colour='yellow')
 
     
 class SparseLinkageData(BaseLinkageData):
+    #_copy_attrs (in base)
     
     @classmethod
     def from_cli_params(cls, *, ref, target, sst, n_gwas, chrom='*', pop=None, verbose=True, return_locals=False, pyarrow=True, colmap=None, **kwg):
@@ -1373,7 +1428,7 @@ class SparseLinkageData(BaseLinkageData):
         linkdata = cls(check=False, verbose=verbose)
         linkdata.reg_dt = reg_dt
         linkdata._extra = _extra
-        linkdata.set_population(pop.split('-')[-1])
+        linkdata.set_pop(pop.split('-')[-1])
         assert np.all(linkdata.get_allele_standev('ref') != 0)
         return linkdata
 
@@ -1420,8 +1475,134 @@ class SparseLinkageData(BaseLinkageData):
         sst_df['maf_ref'] = maf 
         sst_df['std_ref'] = np.sqrt(2.0*maf*(1.0-maf))
         return super().retrieve_sumstats_region(i=i)
+    
+    
+class LinkageDataGroup():
+    
+    @classmethod
+    def from_linkdata_dt(cls, linkdata_dt, refset_df=None):
+        assert type(linkdata_dt) is dict
+        linkgroup = cls()
+        linkgroup.linkdata_dt = linkdata_dt
+        if refset_df is not None: assert 'rfsidx' in refset_df, 'refset_df must have column rfsidx and doesnt!'
+        if refset_df is not None: linkgroup._refset_df = refset_df
+        return linkgroup
+    
+    @classmethod
+    def from_cli_params(cls, *, refset, target, sst, pop, n_gwas=None, verbose=False,
+                        #chrom='*', verbose=False, colmap=None, pop=None, cli=True, rsidmode='auto',
+                        #sstrename_dt=dict(maf='maf_sst',af_A1='af_A1_sst'),  
+                        **kwg):
         
+        assert type(sst) is list
+        if n_gwas is None: n_gwas= [None for _ in range(len(sst))]
+        assert type(n_gwas) is list
+        assert type(pop) is list or False
+        assert len(pop) == len(sst), 'Make sure --pop and --sst arguments have the same number of elements!'
+        msg='Make sure --sst and --n_gwas arguments have the same number of elements if n_gwas info is not in sumstat itself.'
+        assert len(sst) == len(n_gwas), msg
+        # This class works off of /snpinfo_mult_1kg_hm3 as its key consituent from which the rest flows. 
+        # Later we can build a version that adequitely uses AutoLinkageData for genotype references.
         
+        refset = prst.utils.validate_path(refset=refset, must_exist=True, handle_prstdatadir='allow', verbose=verbose)
+        msg = f'The validated --refset path ends with .bed, this is not implemented yet, use proper standard reference. refset={refset} '
+        if refset.endswith('.bed'): raise NotImplementedError(msg)
+        exitstring = refset.split('snpinfo_mult_')[-1]
+        msg = f' refset = {refset} ' + ' However, the format of the file must be {dir}/snpinfo_mult_{cohort}_{snpset}.'
+        assert exitstring.count('_') == 1, msg
+        cohort, snpset = exitstring.split('_')
+        ref_fmt = os.path.join(os.path.dirname(refset),f'ldblk_{cohort}_{{pop}}')
+        
+        linkdata_dt = {}; params_dt = {}
+        for k, (csst, cpop, cn_gwas) in enumerate(zip(sst,pop,n_gwas)):
+            cref = ref_fmt.format(pop=cpop)
+            cref, csst = prst.utils.validate_path(ref=cref, sst=csst, must_exist=True, handle_prstdatadir=['allow',False], verbose=verbose)
+            params_dt[k] = dict(ref=cref, sst=csst, target=target, n_gwas=cn_gwas, pop=cpop, verbose=verbose, **kwg)
+        refset_df = prst.load_refset(refset, verbose=verbose)
+        if verbose: print('')
+        for k, params in params_dt.items():
+            f = os.path.basename
+            psst,pref,ppop=f(params['sst']),f(params['ref']),params.get('pop', None)
+            if verbose: print(f'Processing sumstat <- {psst} | ref <- {pref} | pop <- {ppop} | k <- {k}')
+            linkdata = RefLinkageData.from_cli_params(**params, align_df=refset_df)
+            linkdata_dt[k] = linkdata
+        linkgroup = cls.from_linkdata_dt(linkdata_dt, refset_df=refset_df)
+        
+        return linkgroup
+    
+    def get_rfsidx(self, *, k):
+        csst_df = self.get_linkdata(k=k).get_sumstats_cur()
+        rfsidx = csst_df['rfsidx'].to_numpy()
+        return rfsidx
+    
+    def get_nidx(self, *, k):
+        refset_df = self.get_refset()
+        rfsidx = self.get_rfsidx(k=k)
+        slc_df = refset_df.loc[rfsidx]
+        assert np.all(slc_df['rfsidx'] == rfsidx), _devonlymsg
+        if 'nidx' in slc_df: return slc_df['nidx'].to_numpy()
+        else: return rfsidx
+    
+    def get_refset(self):
+        msg = f'Reference set not present!'
+        if hasattr(self,'_refset_df'): return self._refset_df
+        else: raise AttributeError(msg)
+            
+    def get_linkdata_dt(self):
+        if hasattr(self, 'linkdata_dt'): return self.linkdata_dt
+        else: raise ValueError('linkdata_dt missing. Multiple linkage data object were not loaded into linkage data group.')
+            
+    def get_pop_dt(self):
+        dt={}
+        for k, linkdata in self.get_linkdata_dt().items():
+            dt[k] = linkdata.get_pop()
+        return dt
+    
+    def get_k_list(self):
+        return list(self.get_linkdata_dt().keys())
+            
+    def get_linkdata(self, *, k): return self.get_linkdata_dt()[k]
+    
+    def groupby(self, by, sort=True):
+        ## The name of this method is a groupby method, which is NOT the same as the group 
+        # of different linkagedatas in this objects/class (hence called LinkageData Group, a group of LinkageDatas)
+        grplink_dt_dt = {}; nuniq_lst = []
+        for k, linkdata in self.get_linkdata_dt().items():
+            grplink_dt = {key: item for key, item in linkdata.groupby(by=by, sort=sort)}
+            nuniq_lst += [len(grplink_dt)]
+            grplink_dt_dt[k] = grplink_dt
+        if len(np.unique(nuniq_lst)) > 1:
+            msg = f'There are not the same number of groups ({by}) per input sumstat. ' +\
+            'This probably means a chromosome is missing from one of the input files. +'+\
+            f'Can lead to various issues, better to fix first. '+\
+            f'The number of uniques in the order of processing: {nuniq_lst}'
+            prst.warn(msg, bold=True, colour='red')
+        groupings = np.unique([grp for val in grplink_dt_dt.values() for grp in val.keys()])
+        rfsidx_lst = [] if hasattr(self,'_refset_df') else None
+        if sort: groupings = np.sort(groupings)
+        for grp in groupings:
+            new_linkdata_dt = {}
+            for k, grplink_dt in grplink_dt_dt.items():
+                msg = f'group {grp} missing for the k-th, k={k}, data input, suggests a chromosome is missing for that input'
+                newlinkdata = grplink_dt[grp]
+                if grp in grplink_dt: new_linkdata_dt[k] = newlinkdata
+                else: prst.warn(msg, colour='orange', bold=True)
+                if rfsidx_lst is not None: rfsidx_lst += [newlinkdata.get_sumstats_cur()['rfsidx'].to_numpy()]
+            if isinstance(rfsidx_lst,list):
+                rfsidx = np.unique(np.concatenate(rfsidx_lst))
+                refset_df = self.get_refset()
+                slc_df = refset_df.loc[rfsidx]
+                slc_df['nidx'] = np.arange(slc_df.shape[0])
+                assert np.all(slc_df['rfsidx'] == rfsidx), _devonlymsg
+                nkwg = dict(refset_df=slc_df)
+            else: nkwg = {}
+            newlinkgroup = self.from_linkdata_dt(new_linkdata_dt, **nkwg)
+            yield grp, newlinkgroup
+            
+    def clear_linkage_allregions(self):
+        for linkdata in self.get_linkdata_dt().values():
+            linkdata.clear_linkage_allregions()
+
 if not '__file__' in locals():
     import sys
     if np.all([x in sys.argv[-1] for x in ('jupyter','.json')]+['ipykernel_launcher.py' in sys.argv[0]]):

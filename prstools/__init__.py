@@ -1,5 +1,5 @@
-__version__ = "0.0.71"
-_date = "11-08-2026"
+__version__ = "0.0.72"
+_date = "18-09-2026"
 
 import importlib as _importlib
 
@@ -27,6 +27,7 @@ _lazy_exports = {
     "load_linkagedata": "prstools.io",
     "load_prscs_ldblk": "prstools.io",
     "load_ref": "prstools.io",
+    "load_refset": "prstools.io",
     "load_regdef": "prstools.io",
     "load_snpdb": "prstools.io",
     "load_srd": "prstools.io",

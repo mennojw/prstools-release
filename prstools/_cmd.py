@@ -178,9 +178,11 @@ def set_config(**kwg):
     prstcfg=get_config(copy=False)
     for key, item in kwg.items():
         prstcfg[key] = copypackage.deepcopy(item)
+        
+def get_parser(): return parse_args(argv=[], basecmd='prst', return_parser=True)
 
 def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk Score creation [v{v}]. \n\'prst\' is a commandline shorthand for \'prstools\'",
-               subparserkwg_lst=None, basecmd='prstools', return_spkwg=False, reload=False):
+               subparserkwg_lst=None, basecmd='prstools', return_spkwg=False, reload=False, return_parser=False):
     
     # Prepare parsing params:
     if argv is None: argv=sys.argv[1:]; basecmd=sys.argv[0]
@@ -228,7 +230,10 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             extcmds+=[spkwg['cmdname']] 
         elif spkwg['subtype'] == 'BasePred':
             # Create Model parser and add basic help:
-            basemodels = ['prscs2','prscs2a']
+            
+            
+            print(spkwg)
+            raise Exception('This whole code block has been depreciated and should not have been activated, contact dev.')
             
             model_parser = subparser.add_parser(spkwg['cmdname'],
                                                 help=spkwg['help'] if spkwg['cmdname'] in basemodels else argparse.SUPPRESS,
@@ -238,8 +243,11 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
                                                 argument_default=argparse.SUPPRESS,
                                                 add_help=False)
             
+            basemodels = ['prscs2','prscs2a']
             if not spkwg['cmdname'] in basemodels:
                 subparser._choices_actions = [ca for ca in subparser._choices_actions if ca.dest != spkwg['cmdname']]
+
+                
             modelgeneral_group = model_parser.add_argument_group('General Options')
             modelgeneral_group.add_argument('-h', '--help', action='help', help='Show this help message and exit.') #default=argparse.SUPPRESS
             # WARNING!: there is still something wrong with the default of this --cpus cli argument, it does not seem to get pushed into the setting of the number of cores function.
@@ -286,7 +294,7 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             # Add model-related arguments (hyper parameters and such):
             modelargs_group = model_parser.add_argument_group('Model Arguments (all optional)')
             for argname, item in spkwg['pkwargs'].items():
-                #cargs, ckwargs = process_pkwargs(item) << -- underconstruction, need 2 add verbose=True
+                #cargs, ckwargs = process_pkwargs(item) << -- underconstruction, need 2 add verbose=True 
                 modelargs_group.add_argument(*item['args'], **process_argkwargs(item['kwargs']))
             # Below 'func' contains a delayed import of a classmethod that can run the full method from arg
             # This means the import (which can be slow) will take place only when run, leading to big speedups 
@@ -295,12 +303,15 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             func = retrieve_classmethod(clsname=spkwg['clsname'], methodname='from_cli_params_and_run')
             model_parser.set_defaults(func=func, pkwargs=spkwg['pkwargs'], the_parser=model_parser)
         elif spkwg['subtype'] == 'PRSTCLI':
+
             subcmd_parser = subparser.add_parser(spkwg['cmdname'], help=spkwg['help'],
                                     description=spkwg['description'],
                                     epilog=spkwg['epilog'],
                                     formatter_class=CustomFormatter,
                                     argument_default=argparse.SUPPRESS,
                                     add_help=False)
+            if spkwg.get('hiddencli', False) == True: # Hide certain cli's by adding _hiddencli
+                subparser._choices_actions = [ca for ca in subparser._choices_actions if ca.dest != spkwg['cmdname']]
             
             # Add groups and respective arguments:
             pkwargscum = {}
@@ -314,12 +325,14 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
             # Set func to be linked to all the args:
             data_pkwargs = spkwg['groups'].get('data',{}).get('pkwargs', {})
             func = retrieve_classmethod(modulename=spkwg['modulename'], clsname=spkwg['clsname'], methodname='from_cli_params_and_run')
-            subcmd_parser.set_defaults(func=func, data_pkwargs=data_pkwargs, pkwargs=grpkwg['pkwargs'], the_parser=subcmd_parser, display_info=spkwg.get('display_info',True)) # Yes it needs to b
+            subcmd_parser.set_defaults(func=func, data_pkwargs=data_pkwargs, pkwargs=grpkwg['pkwargs'], the_parser=subcmd_parser, 
+                display_info=spkwg.get('display_info', True)) # Display info is to active cli outputs e.g. hostname: this, cpu count: that
         else:
             raise Exception('Subparser subtype not recognized, Contact dev.')
     
-    # Commence actual parsing:
-    if len(argv)<2 and not 'config' in argv: argv+=['-h']
+    # Commence actual parsing or return parser:
+    if return_parser: return parser
+    if len(argv)<2 and (not 'config' in argv) and not any(elem.startswith('-') for elem in argv): argv+=['-h']
     knargs, _ = parser.parse_known_args(argv)
     if knargs.command in extcmds:
         return knargs
@@ -327,7 +340,7 @@ def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk S
         args = parser.parse_args(argv)
         return args
 
-def main(argv=None):
+def main(argv=None, timestampfmt="%a, %d %b %Y %H:%M:%S %z"):
     
     if argv is None: argv=sys.argv[1:]
     args = parse_args(argv)
@@ -335,10 +348,20 @@ def main(argv=None):
     if 'display_info' in args_dt:
         display_info = args_dt['display_info']
     else: display_info = True
+    if 'out' in args_dt:
+        defaultmkdir = args_dt.get('data_pkwargs',{}).get('mkdir',{}).get('kwargs',{}).get('default',None)
+        mkdirarg = {} if 'mkdir' in args_dt else dict(mkdir=defaultmkdir)
+        from prstools.utils import create_output_fnfmt, TeeStream
+        out_fnfmt = create_output_fnfmt(**args_dt, **mkdirarg)
+        log_fn = out_fnfmt.format(ftype='log')
+        log = open(log_fn, 'a', buffering=256*1024)
+        stdout, stderr = sys.stdout, sys.stderr
+        sys.stdout = TeeStream(stdout, log)
+        sys.stderr = TeeStream(stderr, log)
+
     #display_info = True if 'pkwargs' in args else False ## This is not based on pkwargs prescence but perhaps this should be set instead...
     # since all commands now have it...
-    timestampfmt = "%a, %d %b %Y %H:%M:%S %z"
-
+    
     if display_info:
         param_dt = vars(args) # This param_dt is only for this if displayinfo blurb, for rest args_dt, whcih means mostly same
         topstr = '\n'.join([
@@ -367,12 +390,7 @@ def main(argv=None):
     # Initialize logs and grab certain parts:
     from prstools.utils import get_prstlogs; 
     import pandas as pd; import socket
-    start = pd.Timestamp.now(); hostname = socket.gethostname(); cwd=os.getcwd()
-    defaultmkdir = args_dt.get('data_pkwargs',{}).get('mkdir',{}).get('kwargs',{}).get('default',None)
-    mkdir = args_dt.get('mkdir', defaultmkdir)
-#     import prstools as prst
-#     prst.utils.get_ip().embed()
-    if mkdir is not None: set_config(mkdir=mkdir)        
+    start = pd.Timestamp.now(); hostname = socket.gethostname(); cwd=os.getcwd()    
     if 'seed' in args_dt.get('pkwargs',''):
         if not 'seed' in args_dt:
             args_dt['seed']=int(time.time()) % (2**32)  
@@ -413,7 +431,9 @@ def main(argv=None):
     ''
     # Run the actual task:
     args_dt['return_models'] = False
-    result = args.func(**args_dt)
+    try: result = args.func(**args_dt)
+    finally: 
+        _ = sys.stderr.flush_interval=-1 if 'log' in locals() else None
     import prstools as prst
     # Some post main-task things:
     stop = pd.Timestamp.now(); prstlogs['times']['stop'] = stop; prstlogs.finish()
@@ -429,12 +449,13 @@ if '_isdevenv_prstools' in locals() or '--dev-secret' in sys.argv:
     from prstools import models, utils; import importlib
     importlib.reload(models); importlib.reload(utils)
     try:
-        from prstools.models import PRSCS2, MultiPRS
+        from prstools.models import PRSCS2, MultiPRS, PRSCSX2
         from prstools.utils import DownloadUtil, store_argparse_dicts, Combine, Config, Transform
         try: from prstools.models._ext import _ext_cli_selection
         except: _ext_cli_selection = []
         extra = [getattr(models,elem) for elem in _ext_cli_selection]
-        subparserkwg_lst = [Config, DownloadUtil, Transform, Combine, PRSCS2, MultiPRS] + extra
+        subparserkwg_lst = [Config, DownloadUtil, Transform, Combine, PRSCS2, PRSCSX2, MultiPRS] + extra
+#         ergegr
         store_argparse_dicts(subparserkwg_lst)
         print('Saved new argparse dict. (mind: dont forget the suppress mechanism, this is something in the argparse-dict processing)') 
     except Exception as e: 

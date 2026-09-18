@@ -149,7 +149,7 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
         argexists = os.path.exists(arg)
         do_prstdd = must_exist and (not argexists or (chandle_prstdatadir=='only')) and chandle_prstdatadir in ('allow','only')
         
-        # prstdatadir part: see if it is in the pdd
+        ## Try prstdatadir-based path validity recovery
         if do_prstdd: # note: a lot of this determination of status_prstdatadir is not subsequently used.
             msg = f'prstdatadir is not set, but required to retrieve "{arg}" from prstdatadir, for option {key}. Please set prstdatadir with "prst config".'
             if not prstdatadir and (chandle_prstdatadir=='only'): raise ValueError(msg)
@@ -173,7 +173,7 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
             elif prstdatadir: status_prstdatadir = 'argnoncompliant'
             else: status_prstdatadir='notset'
         
-        # links_df part: see if it can be downloaded, and download if possible
+        ## Try download based path-validity recovery: links_df, see if it can be downloaded, and download if possible
         do_prstlink = do_prstdd and (not argexists and is_prstdatadir_compliant)
         ind = links_df['filename'].str.replace('.tar.gz','') == arg
         ind = ind | (links_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','') == arg)
@@ -208,6 +208,7 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
             msg = '\n' + str(disp_df) + '\nFileNotFoundError: ' + msg
             raise FileNotFoundError(msg)
             
+        ## Verify path existence and if needed throw appropriate error:
         if not os.path.exists(arg) and (must_exist or key == 'ref'): # <- Ok so after handling it still does not exist, we will be throwing a custom error
             msg = f'Could not find "{arg}" no such file or directory. ' # you could make the messages a bit better
             if key == 'ref' and not must_exist: msg += '(Developer-note: variable "ref" always has to exist).'
@@ -215,10 +216,11 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
             xtra=''; msg = msg + xtra
             raise FileNotFoundError(msg)
         
+        ## Verify --ref specific properties and if needed throw appropriate error:
         if key == 'ref': # At this point ref exists as file or dir. # Ref specific processing
-            lst = [f for p in ['*.bed', 'snpinfo*'] for f in glob.glob(os.path.join(arg, p))]
-            msg = (f'Reference directory must contain 1 and only one file ending with ".bed" or starting '
-                   f'with "snpinfo" to be a proper prstools reference. \nFound {len(lst)} matching files ({lst}) in --ref/ref: {arg} \n'
+            lst = [f for p in ['*.bed', 'snpinfo_*'] for f in glob.glob(os.path.join(arg, p))]
+            msg = (f'Reference directory must contain 1 and only one file ending with .bed or starting '
+                   f'with "snpinfo_" to be a proper prstools reference. \nFound {len(lst)} matching files ({lst}) in --ref/ref: {arg} \n'
                    f'Are you sure your current --ref argument is a proper prstools reference?')
             if os.path.isdir(arg):
                 if len(lst) == 1: arg = lst[0]
@@ -228,108 +230,90 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
                    'Your reference(s) might be corrupted. You can delete and redownload them.')
             assert os.path.isfile(arg), msgf
             bn = os.path.basename(arg)
-            cond = bn.startswith('snpinfo') or bn.endswith('.bed')
-            msg5 = (f'File {arg} does not start with snpinfo or end with .bed meaing it cannot be a proper prstools reference. '
+            cond = bn.startswith('snpinfo_') or bn.endswith('.bed')
+            msg5 = (f'File {arg} does not start with snpinfo or end with .bed meaning it cannot be a proper prstools reference. '
                    f'Are you sure --ref was targeting a proper prstools reference?')
             if not cond: FileNotFoundError(msg5)
             else: True # All is good! for "ref" the filename is valid and the file exists!
+                
+        ## Verify --refset specific properties and if needed throw appropriate error:
+        if key == 'refset': # At this point refset exists as file or dir. # Ref specific processing
+            lst = [f for p in ['*.bed', 'snpinfo_mult_*'] for f in glob.glob(os.path.join(arg, p))]
+            
+            msg = (f'Reference set directory must contain 1 and only one file ending with .bed or starting '
+                   f'with "snpinfo_mult_" to be a proper prstools reference. \nFound {len(lst)} matching files ({lst}) in --refset/refset: {arg} \n'
+                   f'Are you sure your current --refset argument is a proper prstools reference?')
+            if os.path.isdir(arg):
+                if len(lst) == 1: arg = lst[0]
+                elif len(lst) > 1: raise RuntimeError(msg)
+                else: raise FileNotFoundError(msg)
+            msgf = msg+('\nrefset/--refset variable needs to be a file now (after some processing) now it is something else. '
+                   'Your reference(s) might be corrupted. You can delete and redownload them.')
+            assert os.path.isfile(arg), msgf
+            bn = os.path.basename(arg)
+            cond = bn.startswith('snpinfo_mult_') or bn.endswith('.bed')
+            msg5 = (f'File {arg} does not start with snpinfo or end with .bed meaing it cannot be a proper prstools reference. '
+                   f'Are you sure --refset was targeting a proper prstools reference?')
+            if not cond: FileNotFoundError(msg5)
+            else: True # All is good! for "refset" the filename is valid and the file exists!
             
         newargs += [arg]
         
     return newargs[0] if len(newargs) == 1 else tuple(newargs)
-    
-# def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, **kwg):
-#     assert handle_prstdatadir in ('only','allow',False)
-#     newargs=[]
-#     prstcfg = load_config()
-#     links_df = _get_linksprst()
-#     prstdatadir = prstcfg.get('prstdatadir', None)
-    
-#     for key, arg in kwg.items():
-        
-#         if not arg: newargs += [arg]; continue # Skipp and continue if None or False
-#         assert type(arg) is str, 'Inputs must be strings to be valid and be validated as paths.'
-#         arg = os.path.expanduser(arg)
-        
-#         if must_exist and (not os.path.exists(arg) or (handle_prstdatadir=='only')):
-            
-#             checked_prstdatadir=False
-            
-#             msg = f'prstdatadir is not set, but required to retrieve "{arg}" from prstdatadir. Please set prstdatadir with prst config.'
-#             if not prstdatadir and (handle_prstdatadir=='only'): raise ValueError(msg)
-                
-#             if handle_prstdatadir and type(prstdatadir) is str and len(arg)>0 and (not arg[0] in '/.') and (arg.count('/') <= 2):
-                
-#                 msg = f'\033[1;31mWARNING: It seems prstools data storage location (i.e. prstdatadir) does not exist (anylonger) @ {prstdatadir}\033[0m'
-#                 if not os.path.exists(prstdatadir):
-#                     warnings.warn(msg)
-#                 else:
-#                     tstarg = os.path.join(prstdatadir, arg)
-#                     prstargexists = os.path.exists(tstarg)
-#                     if os.path.exists(tstarg): arg=tstarg
-#                     if key=='ref':
-#                         tstarg = os.path.join(prstdatadir, 'ldblk_'+arg)
-#                         if os.path.exists(tstarg): arg=tstarg
-#                     checked_prstdatadir=True
-                    
-#                 if (not os.path.exists(arg) or (handle_prstdatadir in ('only','allow') and not prstargexists)):
-#                     #links_df = prst.utils._get_linksprst() 
-                    
-#                     # See if present in links_df
-#                     if key == 'ref':
-#                         ind = links_df['filename'].str.startswith('ldblk_')
-#                         links_df = links_df[ind].reset_index(drop=True)
-#                     ind = links_df['filename'].str.replace('.tar.gz','') == arg
-#                     ind = ind | (links_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','') == arg)
-                    
-#                     if ind.sum() == 1:
-#                         df = links_df[ind]
-#                         print(f'The data for "{arg}" was not yet available in the prstools data directory, so it is downloaded now.')
-#                         if prstcfg['auto_download']: DownloadUtil.from_cli_params_and_run(destdir=prstcfg['prstdatadir'], pattern=arg)
-#                         else: raise RuntimeError(f'auto_download disabled so cannot download {arg}')
-#                         bn = df['filename'].str.replace('.tar.gz','').iloc[0]
-#                         tstarg = os.path.join(prstdatadir, bn)
-#                         assert os.path.exists(tstarg), (f'Although based on input "{arg}" a download was performed. '
-#                             f'This did not result in a file or directory at {tstarg}. This should not happen and is a bug. please contact developer')
-#                         arg = tstarg
-#                     elif ind.sum() > 1:
-#                         links_df['matching'] = ind
-#                         msg = ''
-#                         msg += f'Issue with input argument "--{key}"\n'
-#                         msg += 'It was not present in prstools data dir, but perhaps it can be downloaded.\n'
-#                         msg += 'However it did not match uniquely with the available data downloads:\n'
-#                         msg += str(links_df[['filename','matching','description']]) + '\n'
-#                         msg += 'It should match uniquely!\n\n'
-#                         raise Exception(msg+f'"--{key}" should match uniquely for data download.')
-#                     else:
-#                         msg = ''
-#                         msg += f'Argument "{arg}" for option "--{key}" was not found in prstools data dir, current dir or available in downloads.\n'
-#                         msg += f'Have your argument for "--{key}" match one of these options:\n'
-#                         disp_df = links_df[['filename','description']]
-#                         disp_df.loc[:,'filename'] = disp_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','')
-#                         msg += str(disp_df) + '\n'
-#                         raise Exception(msg + f"-> So in the end could not find '{arg}'")
-                    
-#             if not os.path.exists(arg): # <- Ok so after handling it still does not exist, we will be throwing a custom error
-#                 if checked_prstdatadir: print(f'\n--> Also looked for \'{arg}\' in prstdatadir: {prstdatadir} <--\n')
-#                 notsetbuthere_prstdatadir = True 
-#                 if (handle_prstdatadir in ('only', 'allow') and prstdatadir is None) else False:
-                    
-#                 try:
-#                     open(arg) # this is to make it throw an error, because the file/dir does not exist. 
-#                 except Exception as e:
-#                     msg = f'Could not find "{arg}" no such file or directory.'
-#                     xtra = ', '.join([elem for elem in os.listdir(prstdatadir) if elem[:1] != '.']) if checked_prstdatadir else ''
-#                     xtra = f'Looked in prstdatadir too.\nFor this the options are: {xtra}' if checked_prstdatadir else ''
-#                     xtra += '' if denied_prstdatadir else ''
-#                     if 
-#                     msg = msg + xtra
-#                     raise FileNotFoundError(msg) from e
-#             #import errno
-#             #raise FileNotFoundError( errno.ENOENT, os.strerror(errno.ENOENT), arg)
-#             #raise FileNotFoundError(f'No such file or directory: \'{arg}\'')
-#         newargs += [arg]
-#     return newargs[0] if len(newargs) == 1 else tuple(newargs)
+
+def _get_path_basename(item):
+    if type(item) is str:
+        newitem = os.path.basename(item)
+        if newitem == '': newitem = os.path.basename(item.rstrip('/\\'))
+        if newitem == '': newitem = item 
+    else: newitem = item
+    return newitem
+
+def create_output_fnfmt(*, out, fnfmt='_.{ftype}', ftype=None, mkdir=None, cls=None, prstlogs=True, testsave=True, command=None, **kwg):
+    assert testsave and prstlogs, 'testsave must be enable at this point'
+    from prstools.utils import AutoDict
+    mname = cls.__name__.lower() if cls is not None else command
+    og_out_fnfmt = out + fnfmt
+    kwgkwg = {} if not 'kwargs' in kwg else kwg['kwargs'] # The 'basenaming' here, makes os.path.basename() for complex paths.
+    format_dt = AutoDict({key: _get_path_basename(item) for key, item in {**locals(), **kwg, **kwgkwg}.items()})
+    vanillakeys = ['ftype']
+    for elem in vanillakeys: format_dt[elem] = f'{{{elem}}}' # You can add rather vanilla things to this later.
+    try: out_fnfmt = og_out_fnfmt.format_map(dict(**format_dt))
+    except KeyError as e: raise ValueError(f'Unknown format key {{{e.args[0]}}}; choose from all these options: {", ".join(format_dt)}'
+        f'\nUnknown format key {{{e.args[0]}}} -->  Mind using format-keys {{}} in the output name is an advanced '
+        'and more complex feature. {sst},{target},{ref},{n_gwas},{pop} could be good candidates.'
+        ) from None
+    try: _ = og_out_fnfmt.format_map({key:'whatevv' for key in vanillakeys})
+    except KeyError as e: print(f'File prefix created with format-keys: {out_fnfmt.format_map(AutoDict(ftype=""))}')
+    if testsave: # saving quick check, before lots of work is done
+        #out_fn = out_fnfmt.format(ext='tmp') +'.tmp' # prst.utils.get_ip().embed()
+        out_fn = out_fnfmt.format_map(dict(ftype='tmp')) #+ f'{np.random.randint(0,10**6):07}' + '.tmp'
+        dn = os.path.join(os.path.dirname(out_fn),'.')
+        cond = mkdir #cond = prst.utils.get_config().get('mkdir', None)
+        msg = (f"Cannot save file into a non-existent directory: '{dn}'. "
+                "Use --mkdir (or -m) to create it automatically. Mind it can /make/multiple/dirs.")
+        if os.path.isdir(dn): cond=None # Dir exist so no processing needed in any case
+        if cond == True: 
+            os.makedirs(dn, exist_ok=True)
+            mkdirmsg = f'Directory did not exist and was created (--mkdir option is active): {dn} '
+            prst.warn(mkdirmsg, colour='yellow')
+        elif cond == False: raise OSError(msg)
+        pd.DataFrame(['Currently being computed']) \
+        .to_csv(out_fn, index=False, header=False);
+        os.remove(out_fn) # briefly uncommented this to see doulbe slurm submission issue on mgh cluster.
+    mainout_fn = out_fnfmt.format_map(dict(ftype=ftype))
+    if os.path.isfile(mainout_fn) and ftype is not None:
+        #msg = f"\033[1;31mWARNING:\033[0m The file {mainout_fn} already exists! If this code finishes, it will be overwritten."
+        msg = f'WARNING: {mainout_fn} already exists! If this code finishes it will be overwritten.'
+        prst.warn(msg, bold=True, colour='red')
+    if prstlogs:
+        prstlogs_fn = out_fnfmt.format(ftype='json'); dn, fn = os.path.split(prstlogs_fn)
+        prstlogs_fn = os.path.join(dn, '.prstoolslogs', fn)
+        prstlogs = prst.utils.get_prstlogs()
+        prstlogs.set_prstlogs_fn(prstlogs_fn, save=True)
+    # out_fnfmt can be a completed file name or a string that f'{still}{has}{things}{that_have_to_be_filled_in}'
+    # However, {ftype} (==filetype) will never be filled in, so you can have file.log and file.results.
+    return out_fnfmt
 
 def get_tqdm():
     try:
@@ -615,6 +599,7 @@ class AutoPRSTCLI(PRSTCLI):
         spkwg = dict(
             cmdname    = cls.__name__.lower(), #command name
             clsname    = cls.__name__, #class name
+            hiddencli  = getattr(cls, '_hiddencli', False),
             description= doc, # Help and discription are in the right spot, naming is counter intuitive, save urself time and dont check 
             help       = doc.split('\n')[0], # and dont check again.
             epilog     = epilog,
@@ -831,6 +816,8 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
                     progress_bar.set_postfix(file=file.name)
                 progress_bar.close()
             for elem in os.scandir(tmpdest):
+                test = elem.name.startswith("._") or os.path.basename(elem.name).startswith("._")
+                if test: continue # workaround for weird osx files.
                 shutil.move(elem.path, destination)
             shutil.rmtree(tmpdest, ignore_errors=True)
 
@@ -1061,7 +1048,37 @@ class Transform(AutoPRSTCLI): #, AutoPRSTSubparser):
             print('This is the last error from the bunch:')
             raise e
             
+
+class TeeStream:
+    def __init__(self, stream, log, flush_interval=2):
+        self.stream = stream
+        self.flush_interval = flush_interval
+        self._last_flush = time.monotonic()
+        self.log = log
+        if getattr(log, 'closed', False):
+            raise ValueError('TeeStream log is closed.')
+        if not hasattr(log, 'write') or not log.writable():
+            raise TypeError('TeeStream log must be writable.')
+        mode = getattr(log, 'mode', None)
+        if mode is not None and 'a' not in mode:
+            msg = f"TeeStream log is opened with mode={mode}, rather than append mode ('a')."
+            prst.warn(msg)
+
+    def write(self, s):
+        self.stream.write(s)
+        self.log.write(s)
+        return len(s)
+
+    def flush(self):
+        self.stream.flush()
+        now = time.monotonic()
+        if now - self._last_flush >= self.flush_interval:
+            self.log.flush()
+            self._last_flush = now
     
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+            
 class CycleDict(dict):
 
     def __getitem__(self, key):
