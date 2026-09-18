@@ -1,0 +1,10 @@
+sphinx>=8,<10
+sphinxawesome-theme>=6,<7
+myst-nb>=1,<2
+# sphinx
+# myst-nb
+sphinx-togglebutton
+sphinx-argparse
+sphinx-copybutton
+sphinx-rtd-theme
+# sphinxawesome-theme

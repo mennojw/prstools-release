@@ -1,0 +1,191 @@
+
+ /* ============================================================   
+	Wrap long Jupyter notebook text outputs
+	============================================================ */
+
+ .nboutput pre,
+ .cell_output pre,
+ .output_area pre {
+	 white-space: pre-wrap !important;
+	 overflow-wrap: anywhere;
+	 word-break: break-word;
+	 overflow-x: hidden;
+ }
+
+
+ /* ============================================================
+	VERY COMPACT MyST-NB cells
+	============================================================ */
+
+ /*
+  * Outer spacing:
+  * keep the contents of a notebook cell compact,
+  * but give the whole cell normal breathing room from prose.
+  */
+ .cell {
+	 margin: 1rem 0 1.15rem 0 !important;
+	 padding: 0 !important;
+ }
+
+
+ /* ============================================================
+	INPUT / COMMAND
+	============================================================ */
+
+ .cell_input {
+	 margin: 0 !important;
+	 padding: 0 !important;
+ }
+
+ .cell_input .highlight {
+	 margin: 0 !important;
+	 padding: 0 !important;
+ }
+
+ .cell_input pre {
+	 margin: 0 !important;
+	 padding: 0.45rem 0.75rem !important;
+	 line-height: 1.25 !important;
+ }
+
+
+ /* ============================================================
+	OUTPUT
+	============================================================ */
+
+ .cell_output {
+	 margin: 0 !important;
+	 padding: 0 !important;
+ }
+
+ .cell_output > div,
+ .cell_output .output,
+ .cell_output .output_area,
+ .cell_output .highlight {
+	 margin: 0 !important;
+	 padding: 0 !important;
+ }
+
+ /* Actual stdout/stderr text box */
+ .cell_output pre {
+	 margin: 0 !important;
+	 padding: 0.28rem 0.75rem !important;
+	 line-height: 1.20 !important;
+ }
+
+ /* Remove extra paragraph spacing inside outputs */
+ .cell_output p {
+	 margin: 0 !important;
+	 padding: 0 !important;
+ }
+
+
+ /* ============================================================
+	Hidden / collapsible output
+	============================================================ */
+
+ details.admonition.hide {
+	 background: transparent !important;
+	 border: 0 !important;
+	 box-shadow: none !important;
+
+	 margin: 0 !important;
+	 padding: 0 !important;
+ }
+
+ details.admonition.hide > summary {
+	 background: transparent !important;
+	 border: 0 !important;
+	 border-top: 1px solid #ddd !important;
+
+	 margin: 0 !important;
+	 padding: 0.20rem 0.5rem !important;
+
+	 cursor: pointer;
+ }
+
+ details.admonition.hide > summary .admonition-title {
+	 background: transparent !important;
+	 color: #666 !important;
+
+	 margin: 0 !important;
+	 padding: 0 !important;
+
+	 font-size: 0.85rem !important;
+	 font-weight: 400 !important;
+	 line-height: 1.25 !important;
+ }
+
+ /* Kill RTD admonition icon */
+ details.admonition.hide > summary .admonition-title::before {
+	 display: none !important;
+ }
+
+ /* Hidden output itself */
+ details.admonition.hide > .cell_output,
+ details.admonition.hide > div {
+	 margin: 0 !important;
+	 padding: 0 !important;
+	 background: transparent !important;
+ }
+
+
+ /* ============================================================
+	INTERNAL cell spacing
+	Code + output/collapse should behave like one compact unit
+	============================================================ */
+
+ /* Input -> normal output */
+ .cell_input + .cell_output {
+	 margin-top: 0 !important;
+ }
+
+ /* Input -> collapsed output */
+ .cell_input + details.admonition.hide {
+	 margin-top: 0 !important;
+ }
+
+ /* Output -> collapsed section */
+ .cell_output + details.admonition.hide {
+	 margin-top: 0 !important;
+ }
+
+
+ /* ============================================================
+	Spacing between consecutive notebook cells
+	============================================================ */
+
+ /*
+  * Consecutive notebook cells can sit closer together than
+  * notebook content versus normal prose.
+  */
+ .cell + .cell {
+	 margin-top: 0.65rem !important;
+ }
+ 
+ /* ============================================================
+   HEADING SPACING STUFF
+   ============================================================ */
+
+/* Normal section spacing */
+h1 {
+    margin-top: 2rem !important;
+    margin-bottom: 1rem !important;
+}
+
+h2 {
+    margin-top: 2rem !important;
+    margin-bottom: 0.8rem !important;
+}
+
+
+/* Don't add the big top gap to the first heading of each level */
+h1:first-of-type {
+    margin-top: 0 !important;
+}
+
+/* 
+h2:first-of-type {
+    margin-top: 1rem !important;
+}
+ */
