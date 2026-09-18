@@ -28,11 +28,16 @@ cd ./prstools  # ok the order of all this seems funny, but im not gonna change i
 rm ./_parser_vars.py # Remove the old parser-vars and redo them (incase it was copied) add "-f" for fault tolerant
 python ./_cmd.py --dev-secret # !!!ahh yess, to not have all the alpha code references. 
 
+
+
 # Commiting and push to github & pypi
+echo ">>> Staring with commit & push"
 git add -u
 git commit -m "automatic release"
 git status | grep -q "nothing to commit" # Cool addition that causes crash if something is not on chain.
 git push
+
+echo ">>> Launching NBDEV PYPI Push"
 
 nbdev_pypi
 
@@ -46,9 +51,13 @@ pytest -v -s --pyargs prstools
 conda deactivate
 mamba env remove -n prstools_test -y
 
-#pip uninstall -y prstools
-#pip install -U prstools
-#pytest -v -s --pyargs prstools
+
+echo ">>> 100% DONE "
+
+# pip uninstall -y prstools
+# pip install -U prstools
+# pytest -v -s --pyargs prstools
+# pip 
 
 
 

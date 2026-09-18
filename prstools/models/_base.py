@@ -1036,14 +1036,6 @@ class PRSCS2(BasePred, PRSTCLI):
         #assert self.sampler in ['rue','bhat','sld']
         self.pop = self.pop.upper()
 
-    
-#     def _gig(self, p,a,b, psi=None):
-#         x = np.zeros(b.shape) if psi is None else psi
-#         for j in range(b.shape[0]): # This loop gets everything back in shape. 
-#             x[j] = gigrnd(p, a[j], b[j])
-#             #psi[j] = gigrnd(a-0.5, 2.0*delta[j], n_eff*beta[j]**2/sigma)#, seed=seed)
-#         # else: raise ValueError(f"Option not recognized: {self.gigsampler}")
-#         return x
 
     def _compute_beta_tilde(self, *, beta, i_reg, linkdata):
         beta_tilde = linkdata.get_beta_marginal_region(i=i_reg)
@@ -1144,7 +1136,7 @@ class PRSCS2(BasePred, PRSTCLI):
     
 class PRSCSX2(BasePred, PRSTCLI):
     
-    "PRS-CSx v2: Under-development. " 
+    "PRS-CSx v2: Alpha implementation."
     
     _gig = None
     _default_sampler='rue'
@@ -1192,14 +1184,10 @@ class PRSCSX2(BasePred, PRSTCLI):
         #self.pop = self.pop.upper()
 
     
-#     def _gig(self, p,a,b, psi=None):
-#         x = np.zeros(b.shape) if psi is None else psi
-#         for j in range(b.shape[0]): # This loop gets everything back in shape. 
-#             x[j] = gigrnd(p, a[j], b[j])
-#             #psi[j] = gigrnd(a-0.5, 2.0*delta[j], n_eff*beta[j]**2/sigma)#, seed=seed)
-#         # else: raise ValueError(f"Option not recognized: {self.gigsampler}")
-#         return x
-
+    @classmethod
+    def _get_cli_epilog(cls, commentccode='32'):
+        return None
+    
     @classmethod
     def _get_cli_spkwg(cls, basic_pkwargs=True): ## This badboi wraps the super method to enhance it.
         nargskeys = ['sst','n_gwas']

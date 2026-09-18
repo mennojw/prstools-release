@@ -254,12 +254,10 @@ def get_subparserkwg_lst():
      {'cmdname': 'prscsx2',
       'clsname': 'PRSCSX2',
       'hiddencli': False,
-      'description': 'PRS-CSx v2: Under-development. ',
+      'description': 'PRS-CSx v2: Alpha implementation.',
       'display_info': True,
-      'help': 'PRS-CSx v2: Under-development. ',
-      'epilog': '\x1b[32m# Examples (get data, run model) --> can be directly copy-pasted (:\x1b[0m\n'
-                'prst downloadutil --pattern example --destdir ./; cd example         \n'
-                'prstools prscsx2 --ref ldref_1kg_pop -t target --sst sumstats.tsv --n_gwas 2565 --out ./result-prscsx2\n',
+      'help': 'PRS-CSx v2: Alpha implementation.',
+      'epilog': None,
       'modulename': 'prstools.models._base',
       'groups': {'general': {'grpheader': 'General Options',
                              'pkwargs': {'basics': {'args': ['-h', '--help'], 'kwargs': {'action': 'help', 'help': 'Show this help message and exit.'}},

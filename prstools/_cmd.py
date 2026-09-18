@@ -164,7 +164,6 @@ def load_config():
     
     return prstcfg
 
-
 # import pandas as pd
 _prstcfg = None
 def get_config(reload=False, copy=True):
