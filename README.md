@@ -55,15 +55,9 @@ prstools prscs2 --ref ldref_1kg_pop --target target \
 This will run PRS-CS2 on the example data, using the new implementation
 to demonstrate the capabilities of `prstools` and makes PRS predictions
 for the example dataset. The best and fastest way to get a PRS for your
-is to try the **Tutorial** below.
-<!-- [Getting Started Tutorial](https://github.com/mennojw/prstools-release/blob/main/tutorials/01_getting_started.ipynb). -->
-
-<br> There is also the `prstools` documentation, which resides inside of
-the command-line interface, which you can see by typing `prstools`.
-
-``` bash
-prstools
-```
+is to try the **Tutorial** below. <br> There is also the `prstools`
+documentation, which resides inside of the command-line interface, which
+you can see by typing `prstools`.
 
 ``` console
 Usage:
@@ -114,9 +108,10 @@ Examples --> can be directly copy-pasted (:
  prst prscs2 -r ldref_1kg_pop -t target -s sumstats.tsv -n 2565 -o ./result-prscs2 --pred                  # A shorter version of previous that also does the predictions.
 ```
 
-Soon there will be a copy of this documention online too. As can be
-seen, there are examples at the end of the help output to illustrate
-usage, which should work with a simple copy-paste. <br> <br>
+As can be seen, there are examples at the end of the help output to
+illustrate usage, which should work with a simple copy-paste. There is
+now also an online version of all this documentation
+(https://prstools.readthedocs.io/). <br>
 
 ## Tutorial + Video
 

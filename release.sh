@@ -52,12 +52,13 @@ conda deactivate
 mamba env remove -n prstools_test -y
 
 
-echo ">>> 100% DONE "
-
-# pip uninstall -y prstools
+echo ">>> put environment back"
+conda activate geno
+pip uninstall -y prstools
+pip install -e ~/proj/repos/prstools
 # pip install -U prstools
 # pytest -v -s --pyargs prstools
-# pip 
+echo ">>> 100% DONE "
 
 
 
