@@ -20,6 +20,8 @@ echo "VERSION BUMP"
 nbdev_bump_version
 TODAY=$(date +%d-%m-%Y)
 sed -i '' "s/^_date = .*/_date = \"$TODAY\"/" prstools/__init__.py
+rm -rf docs/_build && \
+COLUMNS=95 sphinx-build -E -a -W docs docs/_build/html
 
 cd "$ORIG_DIR"
 pip install -e ./ # Important, else it might grab anotherin install
