@@ -156,7 +156,7 @@ def get_subparserkwg_lst():
       'groups': {'general': {'grpheader': 'General Options',
                              'pkwargs': {'basics': {'args': ['-h', '--help'], 'kwargs': {'action': 'help', 'help': 'Show this help message and exit.'}},
                                          'cpus': {'args': ['--cpus', '-c'],
-                                                  'kwargs': {'metavar': '<number-of-cpus>',
+                                                  'kwargs': {'metavar': '<num-of-cpus>',
                                                              'default': 1,
                                                              'type': int,
                                                              'help': 'The number of CPUs to use (1–5 is generally most efficient). It is generally best to first maxout (=22) --n_jobs before increasing '
@@ -204,25 +204,27 @@ def get_subparserkwg_lst():
                                                  'kwargs': {'type': str,
                                                             'metavar': '<colnames>',
                                                             'default': '{default_colmap}',
-                                                            'help': 'Optional: Allows one to specify an alterative column name for the internally used columns '
-                                                                    'snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1,, (in that order). Forinstance "--colmap '
-                                                                    'rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,,," (OR, N, FRQA1, are excluded in this example). When the command is run a quick '
-                                                                    'this_column -> that_column conversion table will be shown. Additionaly prstools has many internal checks to make sure a good PRS will '
-                                                                    'be generated! The original default colmap works with the PRS-CS standard sumstat formatting.'}},
+                                                            'help': 'Optional: Specify alterative column names for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1,chrom,pos (in '
+                                                                    'that order). Forinstance "--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,,chr,bp" (OR, N, FRQA1, are excluded in this '
+                                                                    'example). When the command is run a quick this_column -> that_column conversion table will be shown. Additionaly prstools has many '
+                                                                    'internal checks to make sure a good PRS will be generated! The original default colmap works with the PRS-CS standard sumstat '
+                                                                    'formatting.'}},
                                       'rsidmode': {'args': ['--rsidmode'],
                                                    'kwargs': {'type': str,
                                                               'metavar': '<yes/no>',
                                                               'default': 'auto',
-                                                              'help': 'Optional: Allows one to set if rsids should be added to the .bim file information for the target after loading. This is done using '
-                                                                      'chrom and position information. This can make sense if you bim file contains few rsids. By adding rsids after loading the target '
-                                                                      'can be merged with the LD reference or PRS weights.'}},
+                                                              'help': 'Optional: Add rsids to the .bim file snp column for the target after loading. This is done using chrom and position information. '
+                                                                      'This can make sense if you bim file contains few rsids. By adding rsids after loading, the target can be merged with the LD '
+                                                                      'reference or PRS weights.'}},
                                       'pred': {'args': ['--pred', '-p'],
                                                'kwargs': {'required': False,
                                                           'metavar': '<yes/no>',
                                                           'type': str,
                                                           'default': 'auto',
+                                                          'choices': ['yes', 'no', 'auto', 'eval'],
                                                           'help': "Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. With the 'auto' option (which "
-                                                                  'is the default) the tool tries to generate a prediction unless the --chrom option is set. Available options: (yes/no/auto).'}}}},
+                                                                  "is the default) the tool tries to generate a prediction and evaluation, unless the --chrom option is set. With option 'eval' it tries "
+                                                                  'to evaluate performance and throws an error if it fails. Available options: (yes/no/auto/eval).'}}}},
                  'model': {'grpheader': 'Model Arguments (all optional)',
                            'pkwargs': {'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Total number of MCMC iterations.', 'type': int, 'default': 1000}},
                                        'n_burnin': {'args': ['--n_burnin'],
@@ -262,7 +264,7 @@ def get_subparserkwg_lst():
       'groups': {'general': {'grpheader': 'General Options',
                              'pkwargs': {'basics': {'args': ['-h', '--help'], 'kwargs': {'action': 'help', 'help': 'Show this help message and exit.'}},
                                          'cpus': {'args': ['--cpus', '-c'],
-                                                  'kwargs': {'metavar': '<number-of-cpus>',
+                                                  'kwargs': {'metavar': '<num-of-cpus>',
                                                              'default': 1,
                                                              'type': int,
                                                              'help': 'The number of CPUs to use (1–5 is generally most efficient). It is generally best to first maxout (=22) --n_jobs before increasing '
@@ -319,25 +321,27 @@ def get_subparserkwg_lst():
                                                  'kwargs': {'type': str,
                                                             'metavar': '<colnames>',
                                                             'default': '{default_colmap}',
-                                                            'help': 'Optional: Allows one to specify an alterative column name for the internally used columns '
-                                                                    'snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1,, (in that order). Forinstance "--colmap '
-                                                                    'rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,,," (OR, N, FRQA1, are excluded in this example). When the command is run a quick '
-                                                                    'this_column -> that_column conversion table will be shown. Additionaly prstools has many internal checks to make sure a good PRS will '
-                                                                    'be generated! The original default colmap works with the PRS-CS standard sumstat formatting.'}},
+                                                            'help': 'Optional: Specify alterative column names for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1,chrom,pos (in '
+                                                                    'that order). Forinstance "--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,,chr,bp" (OR, N, FRQA1, are excluded in this '
+                                                                    'example). When the command is run a quick this_column -> that_column conversion table will be shown. Additionaly prstools has many '
+                                                                    'internal checks to make sure a good PRS will be generated! The original default colmap works with the PRS-CS standard sumstat '
+                                                                    'formatting.'}},
                                       'rsidmode': {'args': ['--rsidmode'],
                                                    'kwargs': {'type': str,
                                                               'metavar': '<yes/no>',
                                                               'default': 'auto',
-                                                              'help': 'Optional: Allows one to set if rsids should be added to the .bim file information for the target after loading. This is done using '
-                                                                      'chrom and position information. This can make sense if you bim file contains few rsids. By adding rsids after loading the target '
-                                                                      'can be merged with the LD reference or PRS weights.'}},
+                                                              'help': 'Optional: Add rsids to the .bim file snp column for the target after loading. This is done using chrom and position information. '
+                                                                      'This can make sense if you bim file contains few rsids. By adding rsids after loading, the target can be merged with the LD '
+                                                                      'reference or PRS weights.'}},
                                       'pred': {'args': ['--pred', '-p'],
                                                'kwargs': {'required': False,
                                                           'metavar': '<yes/no>',
                                                           'type': str,
                                                           'default': 'auto',
+                                                          'choices': ['yes', 'no', 'auto', 'eval'],
                                                           'help': "Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. With the 'auto' option (which "
-                                                                  'is the default) the tool tries to generate a prediction unless the --chrom option is set. Available options: (yes/no/auto).'}}}},
+                                                                  "is the default) the tool tries to generate a prediction and evaluation, unless the --chrom option is set. With option 'eval' it tries "
+                                                                  'to evaluate performance and throws an error if it fails. Available options: (yes/no/auto/eval).'}}}},
                  'model': {'grpheader': 'Model Arguments (all optional)',
                            'pkwargs': {'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Total number of MCMC iterations.', 'type': int, 'default': 10000}},
                                        'n_burnin': {'args': ['--n_burnin'],
@@ -376,7 +380,7 @@ def get_subparserkwg_lst():
       'groups': {'general': {'grpheader': 'General Options',
                              'pkwargs': {'basics': {'args': ['-h', '--help'], 'kwargs': {'action': 'help', 'help': 'Show this help message and exit.'}},
                                          'cpus': {'args': ['--cpus', '-c'],
-                                                  'kwargs': {'metavar': '<number-of-cpus>',
+                                                  'kwargs': {'metavar': '<num-of-cpus>',
                                                              'default': 1,
                                                              'type': int,
                                                              'help': 'The number of CPUs to use (1–5 is generally most efficient). It is generally best to first maxout (=22) --n_jobs before increasing '
@@ -405,16 +409,18 @@ def get_subparserkwg_lst():
                                                    'kwargs': {'type': str,
                                                               'metavar': '<yes/no>',
                                                               'default': 'auto',
-                                                              'help': 'Optional: Allows one to set if rsids should be added to the .bim file information for the target after loading. This is done using '
-                                                                      'chrom and position information. This can make sense if you bim file contains few rsids. By adding rsids after loading the target '
-                                                                      'can be merged with the LD reference or PRS weights.'}},
+                                                              'help': 'Optional: Add rsids to the .bim file snp column for the target after loading. This is done using chrom and position information. '
+                                                                      'This can make sense if you bim file contains few rsids. By adding rsids after loading, the target can be merged with the LD '
+                                                                      'reference or PRS weights.'}},
                                       'pred': {'args': ['--pred', '-p'],
                                                'kwargs': {'required': False,
                                                           'metavar': '<yes/no>',
                                                           'type': str,
                                                           'default': 'auto',
+                                                          'choices': ['yes', 'no', 'auto', 'eval'],
                                                           'help': "Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. With the 'auto' option (which "
-                                                                  'is the default) the tool tries to generate a prediction unless the --chrom option is set. Available options: (yes/no/auto).'}}}},
+                                                                  "is the default) the tool tries to generate a prediction and evaluation, unless the --chrom option is set. With option 'eval' it tries "
+                                                                  'to evaluate performance and throws an error if it fails. Available options: (yes/no/auto/eval).'}}}},
                  'model': {'grpheader': 'Model Arguments (all optional)',
                            'pkwargs': {'mode': {'args': ['--mode'],
                                                 'kwargs': {'help': "Different modes for file handling. If 'strict' is present an error in forinstance the loading of a weight will lead to a stop. ",

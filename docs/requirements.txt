@@ -7,4 +7,5 @@ sphinx-togglebutton
 sphinx-argparse
 sphinx-copybutton
 sphinx-rtd-theme
+sphinxcontrib-youtube
 # sphinxawesome-theme

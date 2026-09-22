@@ -24,6 +24,7 @@ except:
 #     and callable(val) 
 #     and getattr(val, '__module__', None) == __name__
 # ]
+
 __all__ = ['BasePred','BaseMulti','GroupByModel','MultiPRS','PRSCS2','PRSCSX2']
 # __all__ = ['BasePred','MultiPred','GroupByModel','PredPRS','PRSCS2']
 
@@ -112,7 +113,7 @@ class BasePred(ABC):
         if basic_pkwargs and type(basic_pkwargs) is bool:
             basic_pkwargs = dict(
                 basics=dict(args=['-h','--help'], kwargs=dict(action='help', help='Show this help message and exit.')),
-                cpus=dict(args=['--cpus','-c'], kwargs=dict(metavar='<number-of-cpus>', default=prst._cmd.get_default_cpus(), type=int, 
+                cpus=dict(args=['--cpus','-c'], kwargs=dict(metavar='<num-of-cpus>', default=prst._cmd.get_default_cpus(), type=int, 
                                                 help='The number of CPUs to use (1–5 is generally most efficient). It is generally best to first maxout (=22) --n_jobs before increasing the number of '
                                                             'CPUs above 1. To disable set to -1.')))
 
@@ -146,16 +147,17 @@ class BasePred(ABC):
         chrom=dict(args=['--chrom'], kwargs=dict(required=False, type=str, metavar='<chroms>', default='all', 
                 help="Optional: Select specific chromosome to work with. You can specify a specific chromosome as e.g. \"--chrom 3\". All chromosomes are used by default.")),
         colmap=dict(args=['--colmap'], kwargs=dict(type=str, metavar='<colnames>', default='{default_colmap}', 
-                help="Optional: Allows one to specify an alterative column name for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1,, "
-                "(in that order). Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,,,\" (OR, N, FRQA1, are excluded in this example). "
+                help="Optional: Specify alterative column names for the internally used columns snp,A1,A2,beta,or,pval,se_beta,n_eff,af_A1,chrom,pos "
+                "(in that order). Forinstance \"--colmap rsid,a1,a2,beta_gwas,,pvalue,beta_standard_error,,,chr,bp\" (OR, N, FRQA1, are excluded in this example). "
                 "When the command is run a quick this_column -> that_column conversion table will be shown. Additionaly prstools has many internal checks to make "
                 "sure a good PRS will be generated! The original default colmap works with the PRS-CS standard sumstat formatting.")),
         rsidmode=dict(args=['--rsidmode'], kwargs=dict(type=str, metavar='<yes/no>', default='auto', 
-                help="Optional: Allows one to set if rsids should be added to the .bim file information for the target after loading. This is done using chrom and position information. "
-                "This can make sense if you bim file contains few rsids. By adding rsids after loading the target can be merged with the LD reference or PRS weights.")),
-        pred=dict(args=['--pred','-p'], kwargs=dict(required=False, metavar='<yes/no>', type=str, default='auto', 
+                help="Optional: Add rsids to the .bim file snp column for the target after loading. This is done using chrom and position information. "
+                "This can make sense if you bim file contains few rsids. By adding rsids after loading, the target can be merged with the LD reference or PRS weights.")),
+        pred=dict(args=['--pred','-p'], kwargs=dict(required=False, metavar='<yes/no>', type=str, default='auto', choices=['yes', 'no', 'auto', 'eval'],
                 help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. "
-                "With the 'auto' option (which is the default) the tool tries to generate a prediction unless the --chrom option is set. Available options: (yes/no/auto)."))
+                "With the 'auto' option (which is the default) the tool tries to generate a prediction and evaluation, unless the --chrom option is set. With option 'eval' it tries to evaluate performance "
+                "and throws an error if it fails. Available options: (yes/no/auto/eval)."))
         )
 
         from textwrap import dedent
@@ -207,17 +209,23 @@ class BasePred(ABC):
         return pkwargs
     
     @classmethod
+    def _get_linkageclass(pkwargs=None, ref=None):
+        if pkwargs is None: pkwargs = cls._get_pkwargs_for_class(cls)
+        try: from prstools.linkage import AutoLinkageData as linkcls
+        except: from prstools.linkage import RefLinkageData as linkcls
+        return linkcls
+    
+    @classmethod
     def from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', mkdir=False, fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
                                 verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, rsidmode='auto', pred='auto', regdef=None, 
                                 command=None, **kwargs):
-        try: from prstools.linkage import AutoLinkageData
-        except: from prstools.linkage import RefLinkageData as AutoLinkageData
         
         # Initialize model object(s) (multiple since hyperparam ranges, and maybe chroms):
         if pkwargs is None: pkwargs = cls._get_pkwargs_for_class(cls)
         def testkey(key): return (key in pkwargs) if pkwargs else True # The verbose in the next line overwrites the verbose in the 'kwargs' dict 
         groupby = kwargs.get('groupby', pkwargs.get('groupby',{}).get('kwargs',{}).get('default', groupbydefault))
         model = cls.from_params(**dict({key: item for key, item in kwargs.items() if testkey(key)}, verbose=verbose, groupby=groupby))
+        linkcls = cls._get_linkageclass(pkwargs=pkwargs) # Usually RefLinkageData
         
         ## Loop through different models, likely a parameter grid:
         #for model in models: # not sure about this atm
@@ -226,25 +234,28 @@ class BasePred(ABC):
         if out: out_fnfmt = model.create_output_fnfmt(**locals()); prstlogs=prst.utils.get_prstlogs()
 
         # Initialize data objects, fit the model & predict:
-        linkdata = AutoLinkageData.from_cli_params(ref=ref, target=target, sst=sst, 
+        linkdata = linkcls.from_cli_params(ref=ref, target=target, sst=sst,
                         n_gwas=n_gwas, chrom=chrom, colmap=colmap, pop=pop, verbose=verbose, regdef=regdef, out_fnfmt=out_fnfmt, **kwargs)
         model.set_linkdata(linkdata)
         if fit: model.fit()
         if out: model._save_results(out_fnfmt, out=out, ftype=ftype) # Store fitting result, most often this will be the weights.
-        prstlogs['times']['methodstop'] = pd.Timestamp.now() # Save model endtime
+        prstlogs['times']['methodstop'] = pd.Timestamp.now(); ysv=False # Save model endtime, create helper var
         
         if pred == 'auto' and not hasattr(model, 'weights_df'): pred = 'no'
         if pred == 'auto' and chrom != 'all': pred='no'
         if pred and pred != 'no': # Prediction
-            #model.remove_linkdata(); linkdata.clear_linkage_allregions # seems to do pretty much nothing.. anyway xp was 5% mem, which jumped to 20 and 60 later
             try: 
-                bed = prst.io.load_bed(target, verbose=verbose)
-                yhat = model.predict(bed, rsidmode=rsidmode); 
-                prst.io.save_prs(yhat, fn=out_fnfmt, verbose=verbose) # Store prediction result
-            except Exception as e:
-                msg = (f"Could not generate prediction (e.g. plink file missing)" 
-                       f" so since --pred='auto' the prediction step will be skipped (target={target})")
-                if pred == 'auto': print(msg)
+                bed = prst.io.load_bed(target, verbose=verbose);
+                yhat = model.predict(bed, rsidmode=rsidmode) 
+                prst.io.save_prs(yhat, fn=out_fnfmt, verbose=verbose); ysv=True  # Store prediction result (ysv is helper var, to see if step finished)
+                pheno = prst.io.load_pheno(target, verbose=verbose)
+                scores = prst.scores.eval(pheno, yhat, metrics=['R2','AUC','etc'], verbose=verbose)
+                prst.io.save_scores(scores, fn=out_fnfmt, verbose=verbose)
+            except Exception as e: # One could have some remarks about the logic of this section, but Menno did not want an if/else jungle here.
+                inject = 'evaluation' if ysv else 'prediction'
+                msg = (f"Could not generate {inject} (e.g. plink/pheno file missing)" 
+                       f" so since --pred='auto' the {inject} step will be skipped (target={target})")
+                if pred == 'auto' or (pred=='yes' and ysv) : print(msg);
                 else: raise e
 
         if return_models: 
@@ -1279,10 +1290,11 @@ class PRSCSX2(BasePred, PRSTCLI):
             #model.remove_linkdata(); linkdata.clear_linkage_allregions # seems to do pretty much nothing.. anyway xp was 5% mem, which jumped to 20 and 60 later
             try: 
                 bed = prst.io.load_bed(target, verbose=verbose)
-                yhat = model.predict(bed, rsidmode=rsidmode); 
+                yhat = model.predict(bed, rsidmode=rsidmode)
                 prst.io.save_prs(yhat, fn=out_fnfmt, verbose=verbose) # Store prediction result
+                ########### EVAL!
             except Exception as e:
-                msg = (f"Could not generate prediction (e.g. plink file missing)" 
+                msg = (f"Could not generate prediction (e.g. plink file missing)"
                        f" so since --pred='auto' the prediction step will be skipped (target={target})")
                 if pred == 'auto': print(msg)
                 else: raise e
