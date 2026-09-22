@@ -150,8 +150,8 @@ def get_subparserkwg_lst():
       'display_info': True,
       'help': 'PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.',
       'epilog': '\x1b[32m# Examples (get data, run model) --> can be directly copy-pasted (:\x1b[0m\n'
-                'prst downloadutil --pattern example --destdir ./; cd example        \n'
-                'prstools prscs2 --ref ldref_1kg_pop -t target --sst sumstats.tsv --n_gwas 2565 --out ./result-prscs2\n',
+                'prstools downloadutil --pattern example --destdir ./; cd example        \n'
+                'prst prscs2 --ref ldref_1kg_pop -t target -s sumstats.tsv --n_gwas 2565 --out result-prscs2\n',
       'modulename': 'prstools.models._base',
       'groups': {'general': {'grpheader': 'General Options',
                              'pkwargs': {'basics': {'args': ['-h', '--help'], 'kwargs': {'action': 'help', 'help': 'Show this help message and exit.'}},

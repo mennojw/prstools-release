@@ -87,8 +87,8 @@ class BasePred(ABC):
         
         epilog=f'''\
         # Examples (get data, run model) --> can be directly copy-pasted (:
-        prst downloadutil --pattern example --destdir ./; cd example  {insert}
-        prstools {cmdname} --ref {ldrefname} -t target --sst sumstats.tsv {chromopt}--n_gwas 2565 --out ./result-{cmdname}
+        prstools downloadutil --pattern example --destdir ./; cd example  {insert}
+        prst {cmdname} --ref {ldrefname} -t target -s sumstats.tsv {chromopt}--n_gwas 2565 --out result-{cmdname}
         '''
         
         # prst {cmdname} -r {ldrefname} -t target -s sumstats.tsv -n 2565 {chromopt}-o ./result-{cmdname} --pred # A shorter version of previous that also does the predictions.
@@ -209,7 +209,7 @@ class BasePred(ABC):
         return pkwargs
     
     @classmethod
-    def _get_linkageclass(pkwargs=None, ref=None):
+    def _get_linkageclass(cls, pkwargs=None, ref=None):
         if pkwargs is None: pkwargs = cls._get_pkwargs_for_class(cls)
         try: from prstools.linkage import AutoLinkageData as linkcls
         except: from prstools.linkage import RefLinkageData as linkcls
@@ -246,11 +246,11 @@ class BasePred(ABC):
         if pred and pred != 'no': # Prediction
             try: 
                 bed = prst.io.load_bed(target, verbose=verbose);
-                yhat = model.predict(bed, rsidmode=rsidmode) 
+                yhat = model.predict(bed, rsidmode=rsidmode)
                 prst.io.save_prs(yhat, fn=out_fnfmt, verbose=verbose); ysv=True  # Store prediction result (ysv is helper var, to see if step finished)
-                pheno = prst.io.load_pheno(target, verbose=verbose)
-                scores = prst.scores.eval(pheno, yhat, metrics=['R2','AUC','etc'], verbose=verbose)
-                prst.io.save_scores(scores, fn=out_fnfmt, verbose=verbose)
+                #pheno = prst.io.load_pheno(target, verbose=verbose)
+                #scores = prst.scores.eval(pheno, yhat, metrics=['R2','AUC','etc'], verbose=verbose)
+                #prst.io.save_scores(scores, fn=out_fnfmt, verbose=verbose)
             except Exception as e: # One could have some remarks about the logic of this section, but Menno did not want an if/else jungle here.
                 inject = 'evaluation' if ysv else 'prediction'
                 msg = (f"Could not generate {inject} (e.g. plink/pheno file missing)" 
