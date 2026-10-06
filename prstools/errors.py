@@ -5,6 +5,11 @@ class BaseError(Exception):
     """Base class for all prstools user-facing errors."""
     pass
 
+
+class SchemaError(BaseError):
+    """Raised when required input columns (reqcols) are missing or misnamed."""
+    pass
+
 ## Specific semantic / user-facing errors
 class SumstatSchemaError(BaseError):
     """Raised when required sumstat columns are missing or misnamed."""
@@ -25,5 +30,5 @@ if not '__file__' in locals():
         print('Written to:', loadrf.name)
         if 'In' in locals() and _isdevenv_prstools:
             print('starting here in models:') 
-            get_ipython().system('prst --dev | head -3')
+            get_ipython().system('time python ../prstools/_cmd.py --dev-secret')
             

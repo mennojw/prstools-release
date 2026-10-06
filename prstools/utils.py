@@ -1,5 +1,5 @@
 #| export
-import os, json, time, shutil, glob
+import os, json, time, shutil, glob, sys
 from prstools._ext_utils import *
 import prstools as prst
 import warnings, threading
@@ -39,13 +39,6 @@ def remove_config(*a, **kw):
 #     purple="#7f00ff", pink="#ff4fd8", grey="#888888",
 # )
 
-# def format_colour(msg, colour="yellow"):
-#     if colour is None: return str(msg)
-#     colour = _COLOURS.get(colour, colour)
-#     h = colour.lstrip("#")
-#     r, g, b = int(h[:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-#     return f"\033[38;2;{r};{g};{b}m{msg}\033[0m"
-
 _COLOURS = dict(black="30", red="31", green="32", yellow="33", 
     blue="34", magenta="35", ogpurple="35", purple='38;2;127;0;255', cyan="36", white="37",
     grey="90", gray="90", orange="38;5;208", pink="38;5;213")
@@ -57,7 +50,6 @@ def _get_rgbcode_from_hexcode(hexcode):
 
 def format_string(msg, colour="yellow", bold=False, rgb=False):
     codes= []
-#     if colour is None: return str(msg)
     code = _COLOURS.get(colour, None)
     if type(colour) is str and colour.startswith('#'): code = _get_rgbcode_from_hexcode(colour)
     if code is None and colour is not None: raise ValueError(f'{colour=} not recognized as valid color.')
@@ -68,6 +60,7 @@ def format_string(msg, colour="yellow", bold=False, rgb=False):
 def warn(msg, category=UserWarning, stacklevel=2, colour=None, bold=False, **kwg):
     msg = format_string(msg, colour=colour, bold=bold)
     warnings.warn(msg, category=category, stacklevel=stacklevel, **kwg)
+    sys.stderr.flush()
     
 def plot_dataframe_all(df, maxrows=10_000, maxcols=50):
     from IPython.display import display, HTML
@@ -204,9 +197,14 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
             msg += f'Have your argument for "--{key}" match a fitting option from the table above, or specify a path that exists.'
             disp_df = links_df[['filename','description']]
             disp_df.loc[:,'filename'] = disp_df['filename'].str.replace('.tar.gz','').str.replace('ldblk_','')
-            disp_df = disp_df.rename(columns=dict(filename=f'possible arguments for --{key}'))
-            msg = '\n' + str(disp_df) + '\nFileNotFoundError: ' + msg
+            disp_df = disp_df.rename(columns=dict(filename=f'Arguments for --{key}'))
+            msg = 'A list with possible arguments that can be tried.\n' + str(disp_df) + '\nFileNotFoundError: ' + msg
             raise FileNotFoundError(msg)
+            
+        ## Modify filenames for --pheno and --cov:
+        if not os.path.exists(arg) and key in ['pheno','cov']:
+            tstarg = prst.io._get_stripped_plink_base_fn(arg)+'.'+key
+            if os.path.exists(tstarg): arg = tstarg
             
         ## Verify path existence and if needed throw appropriate error:
         if not os.path.exists(arg) and (must_exist or key == 'ref'): # <- Ok so after handling it still does not exist, we will be throwing a custom error
@@ -214,6 +212,7 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
             if key == 'ref' and not must_exist: msg += '(Developer-note: variable "ref" always has to exist).'
             xtra_maybelater = '\nNote: the argument does start with . or / or has 2+ of slashes. ' if do_prstdd and not is_prstdatadir_compliant else ''
             xtra=''; msg = msg + xtra
+            #get_ip().embed()
             raise FileNotFoundError(msg)
         
         ## Verify --ref specific properties and if needed throw appropriate error:
@@ -246,7 +245,7 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
             if os.path.isdir(arg):
                 if len(lst) == 1: arg = lst[0]
                 elif len(lst) > 1: raise RuntimeError(msg)
-                else: raise FileNotFoundError(msg)
+                else: raise FileNotFoundError(msg) ############################################################### fix here, --refset, being very different and all not ref but refset
             msgf = msg+('\nrefset/--refset variable needs to be a file now (after some processing) now it is something else. '
                    'Your reference(s) might be corrupted. You can delete and redownload them.')
             assert os.path.isfile(arg), msgf
@@ -727,7 +726,7 @@ def _get_linksprst():
     ["ldblk_ukbb_eur.tar.gz", "https://www.dropbox.com/s/t9opx2ty6ucrpib/ldblk_ukbb_eur.tar.gz?dl=1", "UKBB EUR Population LD panel (~6.25G)"],
     ["ldblk_ukbb_sas.tar.gz", "https://www.dropbox.com/s/nto6gdajq8qfhh0/ldblk_ukbb_sas.tar.gz?dl=1", "UKBB SAS Population LD panel (~7.37G)"],
     ["example.tar.gz", "https://www.dropbox.com/scl/fi/yi6lpbp0uhqiepayixvtj/example.tar.gz?rlkey=kvd7r17wuory9ucqdk4rh55jw&dl=1", "PRSTOOLS Example data (3.8M)"],
-#     ["g1000.tar.gz",'https://www.dropbox.com/scl/fi/97lsbtoomhti3q6x2wttf/g1000.tar.gz?rlkey=9hd85oytgnpv6wvbapvu2rk2m&st=3k4fq9ub&dl=1', "European 1kg plink dataset for hapmap3 (~64M)"]
+    ["g1000.tar.gz",'https://www.dropbox.com/scl/fi/97lsbtoomhti3q6x2wttf/g1000.tar.gz?rlkey=9hd85oytgnpv6wvbapvu2rk2m&st=3k4fq9ub&dl=1', "European 1kg plink dataset for hapmap3 (~64M)"]
         #["example.tar.gz","https://www.dropbox.com/scl/fi/7fg6c9e5dnmb0n4cdfquz/example.tar.gz?rlkey=31u2948paz539uw61jq37oe8s&dl=1", "PRSTOOLS Example data (70mb)"] 
     ]
     columns = ["filename", "url", "description"]
@@ -1061,7 +1060,8 @@ class TeeStream:
             raise TypeError('TeeStream log must be writable.')
         mode = getattr(log, 'mode', None)
         if mode is not None and 'a' not in mode:
-            msg = f"TeeStream log is opened with mode={mode}, rather than append mode ('a')."
+            msg = (f"TeeStream log is opened with mode={mode}, rather than append mode ('a'). not sure 'a' is "
+                   "really needed..")
             prst.warn(msg)
 
     def write(self, s):

@@ -1,5 +1,5 @@
-__version__ = "0.0.78"
-_date = "22-09-2026"
+__version__ = "0.0.79"
+_date = "06-10-2026"
 
 import importlib as _importlib
 
@@ -11,6 +11,7 @@ _submodules = [
     "models",
     "utils",
     "errors",
+    "scores"
 ]
 
 # NEW: lazy top-level symbol map
@@ -33,6 +34,7 @@ _lazy_exports = {
     "load_srd": "prstools.io",
     "load_sst": "prstools.io",
     "load_weights": "prstools.io",
+    "load_pheno": "prstools.io", 
 
     # save_*
     "save_bim": "prstools.io",
@@ -48,8 +50,9 @@ _lazy_exports = {
     "plot_popscatter":    "prstools.linkage",
     
     # And extras:
-	"merge_snps": "prstools.io",
-	"warn"      : "prstools.utils"
+	"merge_snps":  "prstools.io",
+	"align_indiv": "prstools.io",
+	"warn"      :  "prstools.utils"
 }
 
 __all__ = (

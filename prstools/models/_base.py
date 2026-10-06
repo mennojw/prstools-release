@@ -154,10 +154,22 @@ class BasePred(ABC):
         rsidmode=dict(args=['--rsidmode'], kwargs=dict(type=str, metavar='<yes/no>', default='auto', 
                 help="Optional: Add rsids to the .bim file snp column for the target after loading. This is done using chrom and position information. "
                 "This can make sense if you bim file contains few rsids. By adding rsids after loading, the target can be merged with the LD reference or PRS weights.")),
-        pred=dict(args=['--pred','-p'], kwargs=dict(required=False, metavar='<yes/no>', type=str, default='auto', choices=['yes', 'no', 'auto', 'eval'],
+        pred=dict(args=['--pred','-p'], kwargs=dict(required=False, metavar='<yes/no>', type=str, default='auto', choices=['yes', 'no', 'auto'],
                 help="Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. "
-                "With the 'auto' option (which is the default) the tool tries to generate a prediction and evaluation, unless the --chrom option is set. With option 'eval' it tries to evaluate performance "
-                "and throws an error if it fails. Available options: (yes/no/auto/eval)."))
+                "With the 'auto' option (which is the default) the tool tries to generate a prediction, unless the --chrom option is set, "
+                "and will always try to generate a prediction if an evaluation is requested (--pheno).  Available options: (yes/no/auto).")),
+        pheno=dict(args=['--pheno'], kwargs=dict(required=False, metavar='<file>', default='auto',
+                help="Optional: Phenotype file used for PRS evaluation. Individual IDs and common phenotype column formats are detected automatically. "
+                "By default this option is auto and will try to evaluate using target path \"<bim-prefix>.pheno\". Use --phenocols to select or map columns explicitly.")),
+        phenocols=dict(args=['--phenocols'], kwargs=dict(required=False, metavar='<cols>', default=None,
+                help="Optional: Select columns from --pheno and/or map their names. Multiple columns can be comma- or space-separated. "
+                "For example: '--phenocols iid=eid,CAD'.")),
+        cov=dict(args=['--cov'], kwargs=dict(required=False, metavar='<file>', default='auto',
+                help="Optional: Covariate file used during PRS evaluation. Individual IDs and common covariate formats are detected automatically. "
+                "By default this option is auto and will try to evaluate using target path \"<bim-prefix>.cov\". Use --covcols to select or map columns explicitly.")),
+        covcols=dict(args=['--covcols'], kwargs=dict(required=False, metavar='<cols>', default=None,
+                help="Optional: Select columns from --cov and/or map their names. Multiple columns can be comma- or space-separated. "
+                "For example: '--covcols iid=eid,age,sex,PC1-PC10'.")),
         )
 
         from textwrap import dedent
@@ -216,50 +228,74 @@ class BasePred(ABC):
         return linkcls
     
     @classmethod
-    def from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', mkdir=False, fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
-                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, rsidmode='auto', pred='auto', regdef=None, 
-                                command=None, **kwargs):
+    def from_cli_params_and_run(cls, *, ref=None, refset=None, target, sst, n_gwas=None, chrom='all', mkdir=False, fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
+                                verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, rsidmode='auto', 
+                                pred='auto', pheno='auto', phenocols=None, cov='auto', covcols=None,
+                                regdef=None, command=None, **kwargs):
         
         # Initialize model object(s) (multiple since hyperparam ranges, and maybe chroms):
         if pkwargs is None: pkwargs = cls._get_pkwargs_for_class(cls)
-        def testkey(key): return (key in pkwargs) if pkwargs else True # The verbose in the next line overwrites the verbose in the 'kwargs' dict 
         groupby = kwargs.get('groupby', pkwargs.get('groupby',{}).get('kwargs',{}).get('default', groupbydefault))
-        model = cls.from_params(**dict({key: item for key, item in kwargs.items() if testkey(key)}, verbose=verbose, groupby=groupby))
+        model = cls.from_params(**dict({key: item for key, item in kwargs.items() if key in pkwargs}, verbose=verbose, groupby=groupby))
+        #model = cls.from_params(**dict({key: item for key, item in {**locals(), **kwargs}.items() if key in pkwargs})) # Optional thing
         linkcls = cls._get_linkageclass(pkwargs=pkwargs) # Usually RefLinkageData
         
-        ## Loop through different models, likely a parameter grid:
-        #for model in models: # not sure about this atm
-        
-        # Gen output file name format and do quick check if output file can be saved before a lot of work is done:
-        if out: out_fnfmt = model.create_output_fnfmt(**locals()); prstlogs=prst.utils.get_prstlogs()
+        # Preflight prep: Gen output file name format and do quick checks & validate --pred
+        out_fnfmt = model.create_output_fnfmt(**locals()) if out else None; prstlogs=prst.utils.get_prstlogs()
+        #pred = model._validate_stuuuuuffs(pred, chrom, target, verbose)
+        #if pred == 'auto' and chrom != 'all': pred='no'
 
         # Initialize data objects, fit the model & predict:
-        linkdata = linkcls.from_cli_params(ref=ref, target=target, sst=sst,
-                        n_gwas=n_gwas, chrom=chrom, colmap=colmap, pop=pop, verbose=verbose, regdef=regdef, out_fnfmt=out_fnfmt, **kwargs)
-        model.set_linkdata(linkdata)
+        linkdata = linkcls.from_cli_params(ref=ref, refset=refset, target=target, sst=sst, n_gwas=n_gwas, 
+                chrom=chrom, colmap=colmap, pop=pop, verbose=verbose, regdef=regdef,
+                out_fnfmt=out_fnfmt, **kwargs) if linkcls else None
+        if linkdata: model.set_linkdata(linkdata);
         if fit: model.fit()
         if out: model._save_results(out_fnfmt, out=out, ftype=ftype) # Store fitting result, most often this will be the weights.
-        prstlogs['times']['methodstop'] = pd.Timestamp.now(); ysv=False # Save model endtime, create helper var
+        prstlogs['times']['methodstop'] = pd.Timestamp.now() # Save model endtime, create helper var
         
-        if pred == 'auto' and not hasattr(model, 'weights_df'): pred = 'no'
-        if pred == 'auto' and chrom != 'all': pred='no'
-        if pred and pred != 'no': # Prediction
-            try: 
-                bed = prst.io.load_bed(target, verbose=verbose);
-                yhat = model.predict(bed, rsidmode=rsidmode)
-                prst.io.save_prs(yhat, fn=out_fnfmt, verbose=verbose); ysv=True  # Store prediction result (ysv is helper var, to see if step finished)
-                #pheno = prst.io.load_pheno(target, verbose=verbose)
-                #scores = prst.scores.eval(pheno, yhat, metrics=['R2','AUC','etc'], verbose=verbose)
-                #prst.io.save_scores(scores, fn=out_fnfmt, verbose=verbose)
-            except Exception as e: # One could have some remarks about the logic of this section, but Menno did not want an if/else jungle here.
-                inject = 'evaluation' if ysv else 'prediction'
-                msg = (f"Could not generate {inject} (e.g. plink/pheno file missing)" 
-                       f" so since --pred='auto' the {inject} step will be skipped (target={target})")
-                if pred == 'auto' or (pred=='yes' and ysv) : print(msg);
-                else: raise e
+        if pred or pred != 'no':
+            pred_df, scores = model._cli_predict_and_eval(**locals())
 
         if return_models: 
             return model
+        
+    def _cli_predict_and_eval(self, *, target, out, out_fnfmt=None, rsidmode='auto', pred='auto', pheno='auto', phenocols=None, cov='auto', covcols=None, verbose=True, **kwg):
+        pred_df, scores = None, None
+        if out_fnfmt is None: out_fnfmt = model.create_output_fnfmt(**locals())
+        pheno_strict = True if pheno and pheno != 'auto' else False
+        try: # for auto, so i does not trip over a non-existing cov
+            if pheno == 'auto': pheno=prst.utils.validate_path(pheno=target)
+            if cov == 'auto': cov=prst.utils.validate_path(cov=target)
+        except: pass
+        if cov == 'auto': cov=None
+        try: # Predict: 
+            bed = prst.io.load_bed(target, verbose=verbose);
+            pred_df = self.predict(bed, rsidmode=rsidmode)
+            if out: prst.io.save_prs(pred_df, fn=out_fnfmt, verbose=verbose); ysv=True  # Store prediction result (ysv is helper var, to see if step finished)
+        except Exception as e:
+            if pred==True or pred == 'yes': raise
+            msg = (f"Could not generate prediction (e.g. plink/pheno file missing)(target={target})" 
+                   f" so since --pred='auto' is in effect the prediction and later steps will be skipped (without crashing).")
+            print(msg); return pred_df, scores
+        try: # Eval
+            # Loading:
+            if verbose: print('Staging predictions.'.ljust(23) + f' -> {pred_df.shape[0]:>12,} individuals and {pred_df.shape[1]:,} PRSs loaded. ')
+            pheno_df = prst.io.load_pheno(pheno, phenocols=phenocols, ptype='pheno', verbose=verbose)
+            covar_df = prst.io.load_pheno(cov,   phenocols=covcols,   ptype='cov',   verbose=verbose) if cov else None
+
+            # Merging:
+            pred_df, pheno_df, covar_df = prst.align_indiv(pred_df, pheno_df, covar_df)
+
+            # Scoring & Storing:
+            score_df = prst.scores.evaluate(pheno_df, pred_df, covar_df, metrics=['R2'], verbose=verbose) # bootstrap with interal multi-prs learning... ?
+            if out: prst.io.save_score(score_df, fn=out_fnfmt, verbose=verbose) # My guess now is that its gonna be a json
+        except Exception as e: # One could have some remarks about the logic of this section, but Menno did not want an if/else jungle here.
+            msg = (f"Could not generate evaluation (e.g. plink/pheno file missing)(pheno={pheno})")
+            if not pheno_strict: msg += f" so since --pheno='auto' is in effect the evaluation step will be skipped (without crashing)."
+            print(msg) #if pheno and 'pred_df' in locals(): 
+            if pheno_strict: raise e
+        return pred_df, scores
     
     def _save_results(self, fn, *, out, ftype):
         res = self.save_weights(fn, ftype=ftype)
@@ -813,7 +849,7 @@ class GroupByModel(BaseMulti, BasePred):
             weights_df_dt = {}
             for k in k_lst:
                 wlst = [model.weights_df_dt.get(k, None) for grp, model in self.model_dt.items() if fun(grp, model)]
-                weights_df = pd.concat(wlst, axis=0) #for grp, model in self.model_dt.items():
+                weights_df = pd.concat(wlst, axis=0).reset_index(drop=True) #for grp, model in self.model_dt.items():
                 cols = [col for col in weights_df.columns if col in allowed_cols]
                 modelstring = modelstring_dt[k]
                 weights_df_dt[modelstring] = weights_df[cols]
@@ -822,7 +858,8 @@ class GroupByModel(BaseMulti, BasePred):
             multi = MultiPRS.from_dict(weights_df_dt, ref_df=linkobj.get_refset(), dropdupcols=True); weights_df=None
             weights_df = multi.get_weights()
         else:    
-            weights_df = pd.concat([model.get_weights() for grp, model in self.model_dt.items()], axis=0) #for grp, model in self.model_dt.items():
+            weights_df = pd.concat([model.get_weights() for grp, model in self.model_dt.items()], axis=0).reset_index(drop=True) 
+            #for grp, model in self.model_dt.items():
         self._set_weights(weights_df, silentsort=True)
     
 class MultiPRS(BaseMulti, BasePred, PRSTCLI):
@@ -902,9 +939,10 @@ class MultiPRS(BaseMulti, BasePred, PRSTCLI):
         def testkey(key): return (key in pkwargs) if pkwargs else True # The verbose in the next line overwrites the verbose in the 'kwargs' dict 
         #groupby = kwargs.get('groupby', pkwargs.get('groupby',{}).get('kwargs',{}).get('default', groupbydefault))
         # mind that in current version,
-        groupby = False ## going for this untill its more clear
-        modelkwg = dict({key: item for key, item in kwg.items() if testkey(key)}, verbose=verbose, groupby=groupby)
-        self = cls.from_params(**modelkwg)        
+        #groupby = False ## going for this untill its more clear
+        #modelkwg = dict({key: item for key, item in kwg.items() if testkey(key)}, verbose=verbose, groupby=groupby)
+        modelkwg = dict({key: item for key, item in {**locals(),**kwg}.items() if testkey(key)})
+        self = cls.from_params(**modelkwg)
         ref = prst.utils.validate_path(ref=ref,  handle_prstdatadir='allow')
         if os.path.isdir(ref):
             ref_lst = glob.glob(os.path.join(ref, '*.bim'))
@@ -944,36 +982,46 @@ class MultiPRS(BaseMulti, BasePred, PRSTCLI):
         #msg += 'Will be combining the weights and dont worry.. before the prediction is starting a combined version will be stored which can be reloaded quickly.'
         if verbose: print(msg+'\n')
         target_df, _ = prst.load_bimfam(target, fam=False, start_string = 'Loading target file.', verbose=False) if target else (None,None) # Load the target to make sure it work
-            
+        
         # Loop through files:
         if verbose: print('Loading & Combining weights:')
         weights_dt = {}
         pbar = prst.utils.get_pbar(list(zip(fn_lst,out_lst))) 
-        pbar.set_description(f"{'Loading':<12}")
-        lasterr=False; first = True
+        pbar.set_description(f"{'Loading':<12}"); errct = 0
+        lasterrorargs=False; first = True; wgtkwg= {} if 'strict' in self.mode else dict(iloc=False)
         for fn, out_fn in pbar:
             bn = os.path.basename(fn)
             pbar.set_postfix(bn=bn)
             try:
                 #print(f'\nIt seems {os.path.basename(out_fn)} does not exist (or a redo was requested) so we are making it from {fn}')
-                weights_df = prst.load_weights(fn)
+                with pbar.external_write_mode(): weights_df = prst.load_weights(fn, **wgtkwg)
                 weights_dt[bn] = weights_df
             except Exception as e:
-                lasterr = e
-                if 'strict' in self.mode:
-                    raise e from Exception('Set --mode flex to have the procedure skip input files that give issues.')
-        if lasterr != False:
-            print('This is the last error from the bunch:')
-            if not 'flex' in mode:
-                raise e
-            else: print(lasterr)
+                lasterrorargs = (fn, out_fn); errcnt+=1
+                if not 'flex' in self.mode:
+                    pbar.close()
+                    msg = "Hint: use \'--mode flex\' to skip input files that give issues. " + \
+                          "Also make sure --weights points to PRS weights files."
+                    msg = '{e}\n'+prst.utils.format_string(msg, colour='yellow')
+                    e.args = (msg.format(e=e),)
+                    raise
+        if lasterrorargs != False:
+            fn=lasterrorargs[0]
+            print(f'\nEncountered {errcnt} errors! This is the last error from the bunch:')
+            print('\nFilename: ', fn)
+            try: 
+                prst.load_weights(fn)
+                prst.load_weights(fn, **wgtkwg)
+            except Exception as e2:
+                if not 'flex' in self.mode: raise e2
+                else: print(e2,'\n')
         
         # Combine the weights into one frame:    
         model = cls.from_dict(weights_dt, **modelkwg, ref_df=ref_df)
         
         if len(weights_dt) > 1: 
             if prst.io.get_pyarrowinstalled_bool():
-                model._save_results(out_fnfmt, out=out, ftype=weights_ftype)
+                model._save_results(out_fnfmt, out=out, ftype=weights_ftype) ### <--- maybe weights auto ...
             else: 
                 if verbose: print('Skipping multi-weights saving since pyarrow is not installed\n')
         elif verbose: print("Not re-saving weights since there was only 1 input weight.\n")
@@ -1061,7 +1109,7 @@ class PRSCS2(BasePred, PRSTCLI):
         self.set_linkdata(linkdata, ignore_none=True)
         s=self; linkdata=s.linkdata; 
         n_burnin=s.n_burnin; n_slice=s.n_slice; 
-        n_iter=s.n_iter; n_pst=(n_iter-n_burnin)/n_slice
+        n_iter=s.n_iter; n_pst=int((n_iter-n_burnin)/n_slice)
         a=s.a; b=s.b; phi=s.phi
         verbose=s.verbose; do_phi_updt=self.do_phi_updt
         beta_mrg = linkdata.get_beta_marginal()
@@ -1211,8 +1259,17 @@ class PRSCSX2(BasePred, PRSTCLI):
             "For example: --pop EUR AFR. Standard PRS-CSx reference populations are AFR, AMR, EAS, EUR and SAS."))
         spkwg['groups']['data']['pkwargs']['pop'] = pop
         pkwargs = spkwg['groups']['data']['pkwargs']
+#         def morph(arg):
         spkwg['groups']['data']['pkwargs'] = {k: pkwargs[k] for k in order if k in pkwargs} | {k: v for k, v in pkwargs.items() if k not in order}
         return spkwg
+    
+    @classmethod
+    def _get_linkageclass(cls, pkwargs=None, ref=None):
+        if pkwargs is None: pkwargs = cls._get_pkwargs_for_class(cls)
+#         try: from prstools.linkage import AutoLinkageData as linkcls
+#         except: from prstools.linkage import RefLinkageData as linkcls
+        from prstools.linkage import LinkageDataGroup as linkcls
+        return linkcls
         
     @classmethod
     def old_from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
@@ -1257,9 +1314,13 @@ class PRSCSX2(BasePred, PRSTCLI):
 
         if return_models: 
             return model
+    
+    @classmethod
+    def from_cli_params_and_run(cls, *, ref, **kwargs):
+        return super().from_cli_params_and_run(refset=ref, **kwargs)
         
     @classmethod
-    def from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
+    def hideme_from_cli_params_and_run(cls, *, ref, target, sst, n_gwas=None, chrom='all', fnfmt='_.{ftype}', ftype='prstweights.tsv', groupbydefault=False,
                                 verbose=True, pkwargs=None, out=None, return_models=True, fit=True, pop=None, colmap=None, rsidmode='auto', pred='auto', regdef=None, 
                                 command=None, **kwargs):
         from prstools.linkage import LinkageDataGroup
@@ -1320,14 +1381,9 @@ class PRSCSX2(BasePred, PRSTCLI):
         # prst.utils.get_ip().embed()
         
         n_burnin=s.n_burnin; n_slice=s.n_slice; 
-        n_iter=s.n_iter; n_pst=(n_iter-n_burnin)/n_slice
+        n_iter=s.n_iter; n_pst = len(range(n_burnin,n_iter,n_slice))
         a=s.a; b=s.b; phi=s.phi
         verbose=s.verbose; do_phi_updt=self.do_phi_updt
-        
-        linkdata  = linkgroup.get_linkdata(k=0)
-#         beta_mrg = linkdata.get_beta_marginal()
-#         p        = len(beta_mrg)
-#         n_eff    = linkdata.get_sumstats_cur()['n_eff'].median()
         refset_df = linkgroup.get_refset()
         p_tot     = refset_df.shape[0]
         
@@ -1336,13 +1392,10 @@ class PRSCSX2(BasePred, PRSTCLI):
         # Initalisations:
         if self.seed != None: np.random.seed(self.seed)
             
-        beta=np.zeros((p_tot,1)); 
-        beta_est=np.zeros((p_tot,1)); 
-        beta_ml=np.zeros((p_tot,1))
         psi=np.ones((p_tot,1)); 
         psi_est=np.zeros((p_tot,1)); 
         self.scores=[]
-        sigma=1.; sigma_est=0.; phi_est=0.;
+        phi_est=0.
         beta_dt = {}; sigma_dt = {}; nidx_dt={}; n_eff_dt = {}
         #if self.pbar and type(self.pbar)is bool self.pbar = tqdm
         init = lambda : {k: 0 for k in k_lst}
@@ -1351,15 +1404,16 @@ class PRSCSX2(BasePred, PRSTCLI):
         # Sampling Loops:
         if verbose: print('Starting iterations of Sampler:')
         for itr in self.get_iterator(range(n_iter), pbar=self.pbar):
-            quad = 0; i_reg=None
-            
             for k, clinkdata in linkgroup.get_linkdata_dt().items():
-                
+                quad = 0
                 beta_mrg = clinkdata.get_beta_marginal()
                 p        = len(beta_mrg)
                 if not k in n_eff_dt: n_eff_dt[k] = clinkdata.get_sumstats_cur()['n_eff'].median()
+                if not k in nidx_dt: nidx_dt[k] = linkgroup.get_nidx(k=k)
                 n_eff    = n_eff_dt[k]
                 beta     = beta_dt.get(k, np.zeros((p,1)))
+                sigma    = sigma_dt.get(k, 1.0)
+                cpsi     = psi[nidx_dt[k]]
                 
                 for i_reg in self._order(clinkdata.get_i_list()):
 
@@ -1368,10 +1422,10 @@ class PRSCSX2(BasePred, PRSTCLI):
 
                     # Sample beta from MVN:
                     s2 = sigma; s=np.sqrt(s2)
-                    idx_reg = range(*linkdata.get_range_region(i=i_reg));
+                    idx_reg = range(*clinkdata.get_range_region(i=i_reg));
                     if self.sampler == 'rue':
-                        D = linkdata.get_linkage_region(i=i_reg)
-                        dinvt = D + np.diag(1.0/psi[idx_reg].T[0])
+                        D = clinkdata.get_linkage_region(i=i_reg)
+                        dinvt = D + np.diag(1.0/cpsi[idx_reg].T[0])
                         test = dinvt@beta_tilde
                         dinvt_chol = linalg.cholesky(dinvt)
                         beta_tmp = (linalg.solve_triangular(dinvt_chol, beta_tilde, trans='T') +
@@ -1387,7 +1441,7 @@ class PRSCSX2(BasePred, PRSTCLI):
                     self.scores.append(score)
 
                 # Stuffs: (more tweaking prob needed)
-                err = max(n_eff/2.0*(1.0-2.0*sum(beta*beta_mrg)+quad), n_eff/2.0*sum(beta**2/psi))
+                err = max(n_eff/2.0*(1.0-2.0*sum(beta*beta_mrg)+quad), n_eff/2.0*sum(beta**2/cpsi))
                 sigma_dt[k] = 1.0/np.random.gamma((n_eff+p)/2.0, 1.0/err)
                 beta_dt[k]  = beta
             
@@ -1403,18 +1457,23 @@ class PRSCSX2(BasePred, PRSTCLI):
                 assert n_grp.min() > 0
 
             # Sample Variance of the Weight prior:
-            for j in range(p): psi[j] = gigrnd(a-0.5*n_grp[j], 2.0*delta[j], xx[j])
+            #for j in range(p): psi[j] = gigrnd(a-0.5*n_grp[j], 2.0*delta[j], xx[j]) 
+            for j in range(p_tot):
+                while True:
+                    try: psi[j] = gigrnd(a-0.5*n_grp[j], 2.0*delta[j], xx[j]); break
+                    except (OverflowError, ZeroDivisionError, ValueError): pass
+                    #if np.isfinite(x) and x > 0: psi[j] = x; break
             if self.clip: psi[psi>self.clip] = self.clip #Clipping.
                           
                           
             #### SIMILAR OR SAME...
             # Sample Phi or continue with set value:
-            if self.do_phi_updt == True: # Could be tweaked with range_p_filter for speed.
+            if self.do_phi_updt == True: # Could be tweaked with range_p_filter for speed. 
                 w = np.random.gamma(1.0, 1.0/(phi+1.0))
-                phi = np.random.gamma(p*b+0.5, 1.0/(sum(delta)+w))
+                phi = np.random.gamma(p_tot*b+0.5, 1.0/(sum(delta)+w))
 
             # Posterior:
-            if (itr>n_burnin) and ((itr%n_slice)==0):
+            if (itr>=n_burnin) and (((itr-n_burnin)%n_slice)==0):
                 for k in k_lst:
                     beta_est_dt[k]    = beta_est_dt[k] + beta_dt[k]/n_pst
                     beta_sq_est_dt[k] = beta_sq_est_dt[k] + beta_dt[k]**2/n_pst
@@ -1429,7 +1488,7 @@ class PRSCSX2(BasePred, PRSTCLI):
         weights_df_dt = {}
         for k, clinkdata in linkgroup.get_linkdata_dt().items():
             weights_df = clinkdata.get_sumstats_cur().copy()
-            weights_df['psi_est'] = psi_est
+            weights_df['psi_est'] = psi_est[nidx_dt[k]]
             weights_df['raw_weight'] = beta_est_dt[k]
             std = clinkdata.get_allele_standev(source=self.scaling)
             allele_weight = beta_est_dt[k]/std
@@ -1448,10 +1507,10 @@ if np.all([x in sys.argv[-1] for x in ('jupyter','.json')]+
           ['ipykernel_launcher.py' in sys.argv[0]] + 
           [not '__file__' in locals()]):
 
-    if 'In' in locals() and _isdevenv_prstools:
+    if 'In' in locals() and _isdevenv_prstools: 
         code = In[-1] 
         with open('../prstools/models/_base.py', 'w') as f: f.write(code)
-        print('Written to:', f.name); time.sleep(0.03)
+        print('Written to:', f.name); time.sleep(0.03) 
         print('starting here in models:')
         get_ipython().system('python ../prstools/_cmd.py --dev-secret')
         #!prst --dev | head -3

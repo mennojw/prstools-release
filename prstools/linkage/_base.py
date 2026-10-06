@@ -1489,8 +1489,8 @@ class LinkageDataGroup():
         return linkgroup
     
     @classmethod
-    def from_cli_params(cls, *, refset, target, sst, pop, n_gwas=None, verbose=False,
-                        #chrom='*', verbose=False, colmap=None, pop=None, cli=True, rsidmode='auto',
+    def from_cli_params(cls, *, refset, target, sst, pop, ref=None, n_gwas=None, verbose=False, # Ref being added here to be pulled out of kwg
+                        #chrom='*', verbose=False, colmap=None, pop=None, cli=True, rsidmode='auto', # need for downstream mechanics
                         #sstrename_dt=dict(maf='maf_sst',af_A1='af_A1_sst'),  
                         **kwg):
         
@@ -1498,6 +1498,9 @@ class LinkageDataGroup():
         if n_gwas is None: n_gwas= [None for _ in range(len(sst))]
         assert type(n_gwas) is list
         assert type(pop) is list or False
+        if type(pop) is list: 
+            pop = [elem.lower() for elem in pop]
+            for elem in pop: assert type(elem) is str, f'Inputs for populations (i.e. --pop) must be string. Now there is: {type(elem)} for {elem}'
         assert len(pop) == len(sst), 'Make sure --pop and --sst arguments have the same number of elements!'
         msg='Make sure --sst and --n_gwas arguments have the same number of elements if n_gwas info is not in sumstat itself.'
         assert len(sst) == len(n_gwas), msg
@@ -1522,7 +1525,8 @@ class LinkageDataGroup():
         if verbose: print('')
         for k, params in params_dt.items():
             f = os.path.basename
-            psst,pref,ppop=f(params['sst']),f(params['ref']),params.get('pop', None)
+            psst,ppop=f(params['sst']),params.get('pop', None)
+            pref = f(os.path.dirname(params['ref']))
             if verbose: print(f'Processing sumstat <- {psst} | ref <- {pref} | pop <- {ppop} | k <- {k}')
             linkdata = RefLinkageData.from_cli_params(**params, align_df=refset_df)
             linkdata_dt[k] = linkdata
@@ -1578,20 +1582,21 @@ class LinkageDataGroup():
             f'The number of uniques in the order of processing: {nuniq_lst}'
             prst.warn(msg, bold=True, colour='red')
         groupings = np.unique([grp for val in grplink_dt_dt.values() for grp in val.keys()])
-        rfsidx_lst = [] if hasattr(self,'_refset_df') else None
+        #rfsidx_lst = [] if hasattr(self,'_refset_df') else None
         if sort: groupings = np.sort(groupings)
         for grp in groupings:
-            new_linkdata_dt = {}
+            new_linkdata_dt = {}; rfsidx_lst = [] if hasattr(self,'_refset_df') else None
             for k, grplink_dt in grplink_dt_dt.items():
                 msg = f'group {grp} missing for the k-th, k={k}, data input, suggests a chromosome is missing for that input'
-                newlinkdata = grplink_dt[grp]
-                if grp in grplink_dt: new_linkdata_dt[k] = newlinkdata
+                if grp in grplink_dt: 
+                    newlinkdata = grplink_dt[grp]; new_linkdata_dt[k] = newlinkdata
+                    if rfsidx_lst is not None: rfsidx_lst += [newlinkdata.get_sumstats_cur()['rfsidx'].to_numpy()]
                 else: prst.warn(msg, colour='orange', bold=True)
-                if rfsidx_lst is not None: rfsidx_lst += [newlinkdata.get_sumstats_cur()['rfsidx'].to_numpy()]
+                
             if isinstance(rfsidx_lst,list):
                 rfsidx = np.unique(np.concatenate(rfsidx_lst))
                 refset_df = self.get_refset()
-                slc_df = refset_df.loc[rfsidx]
+                slc_df = refset_df.loc[rfsidx].copy()
                 slc_df['nidx'] = np.arange(slc_df.shape[0])
                 assert np.all(slc_df['rfsidx'] == rfsidx), _devonlymsg
                 nkwg = dict(refset_df=slc_df)

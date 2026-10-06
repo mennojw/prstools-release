@@ -353,7 +353,9 @@ def main(argv=None, timestampfmt="%a, %d %b %Y %H:%M:%S %z"):
         from prstools.utils import create_output_fnfmt, TeeStream
         out_fnfmt = create_output_fnfmt(**args_dt, **mkdirarg)
         log_fn = out_fnfmt.format(ftype='log')
-        log = open(log_fn, 'a', buffering=256*1024)
+        #os.&**&^*^&JHKKJKJKJH{{{
+        if os.path.exists(log_fn): os.remove(log_fn)
+        log = open(log_fn, 'a', buffering=256*1024) # I think it will also work with 'w' but 'a' a minibit more multiproc ready.
         stdout, stderr = sys.stdout, sys.stderr
         sys.stdout = TeeStream(stdout, log)
         sys.stderr = TeeStream(stderr, log)
@@ -454,7 +456,6 @@ if '_isdevenv_prstools' in locals() or '--dev-secret' in sys.argv:
         except: _ext_cli_selection = []
         extra = [getattr(models,elem) for elem in _ext_cli_selection]
         subparserkwg_lst = [Config, DownloadUtil, Transform, Combine, PRSCS2, PRSCSX2, MultiPRS] + extra
-#         ergegr
         store_argparse_dicts(subparserkwg_lst)
         print('Saved new argparse dict. (mind: dont forget the suppress mechanism, this is something in the argparse-dict processing)') 
     except Exception as e: 

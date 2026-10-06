@@ -50,7 +50,7 @@ def validate_dataframe_index(df, fix=True, drop=True, warn=True, inplace=True, m
         if not all_ok:
             msg='prst dataframe index is being reset, most of the time this is not an issue.'
             if warn:
-                warnings.warn(msg)
+                prst.warn(msg)
             df.reset_index(drop=drop, inplace=True)
     else: assert all_ok, msg
     return df
@@ -506,8 +506,7 @@ def get_pyarrowinstalled_bool():
     try:
         import pyarrow as pyarrowpack 
         return True
-    except:
-        return False
+    except: return False
 
 def get_pyarrow_prw(delimiter=None, pyarrow=True):
     if pyarrow:
@@ -612,6 +611,49 @@ def get_chrom_map(flow='in', version='onlyonenow'):
     }
 
     return chrom_map
+
+def align_indiv(*dfs, handle_missing='filter', verbose=True):
+    """Align individual-level dataframes by fid/iid (or iid), without filtering NaNs."""
+    valid = [df for df in dfs if df is not None]
+    if not valid: return dfs
+
+    # Make IDs accessible as columns:
+    def prep(df):
+        ids = {'fid','iid'}
+        if ids.intersection(df.index.names): df = df.reset_index()
+        if 'iid' not in df: raise ValueError(f"No 'iid' column found in {df.attrs.get('fn', 'input')}.")
+        return df
+    valid = [prep(df) for df in valid]
+    idcols = ['fid','iid'] if all('fid' in df for df in valid) else ['iid']
+
+    # Check IDs are unique, then index all frames:
+    ready = []
+    for df in valid:
+        if df.duplicated(idcols).any():raise ValueError(f"Duplicate individual IDs found in {df.attrs.get('fn', 'input')}.")
+        ready.append(df.set_index(idcols))
+
+    # Common individuals, preserving order of first dataframe:
+    idx = ready[0].index
+    for df in ready[1:]: idx = idx[idx.isin(df.index)]
+    if handle_missing not in ('filter', 'raise'): raise ValueError("handle_missing must be 'filter' or 'raise'.")
+    if handle_missing == 'raise' and any(len(df) != len(idx) for df in ready): raise ValueError("Individual IDs do not completely overlap between inputs.")
+    if verbose:
+        ns = [len(df) for df in ready]
+        print(f"Aligning individuals: {', '.join(f'{n:,}' for n in ns)} -> {len(idx):,} common.")
+
+    # Put Nones back where they occurred:
+    out, j = [], 0
+    for df in dfs:
+        if df is None:
+            out.append(None)
+        else:
+            attrs = df.attrs.copy()
+            cur = ready[j].loc[idx].copy()
+            cur.attrs.update(attrs)
+            out.append(cur)
+            j += 1
+
+    return tuple(out)
 
 def merge_snps(df0, df1, *, flipcols, afcols=[], how='left', on=['snp','AX'], reset_index=True, extradropdupcols=False, dropalldupcols=False,
                dropduprightcols=['chrom','snp','cm','pos','A1','A2','maf_ref','std_ref','af_A1_ref','AX'], warndupcol=True, removedups=True,
@@ -791,13 +833,41 @@ def compute_pvalbetase(df, *, calc_lst=['pval','beta','se_beta'], pvalmin=1e-323
         assert np.sum(df.pval < pvalmin) == 0
     return df
 
-def cprint_input_df(df, prefix='\nERROR WITH INPUT (reason at the end) -', show_dims=False, iloc=[0,1,-1]):
-    if df.shape[0] < len(iloc): iloc=df.index
-    print(f'{prefix} This is what the currently loaded top-rows of dataframe/sumstat looks like after '
-          'colmap\'ing (using --colmap, if supplied)(frame is transposed, to make it easier to view):\n', df.iloc[iloc].T)
+def cprint_input_df(df, prefix='\nERROR WITH INPUT (reason at the end) -', show_dims=False, sst=False, iloc=[0,1,-1], end='\n'):
+    if iloc and (df.shape[0] < len(iloc)): iloc=df.index
+    msg = (f'{prefix} This is what the currently loaded top-rows of dataframe (e.g. sumstat/prs-weights)'
+           f' looks like {{inject}}(frame is transposed, to make it easier to view):\n')
+    if iloc:
+        disp_df = df.iloc[iloc].T if iloc else df.iloc[iloc].T 
+        inject = 'after colmap\'ing (using --colmap, if supplied)' if sst else ''
+        print(msg.format(**locals()), disp_df)
     if show_dims: print(f'dims: {df.shape}')
-    #print(f'All the column names in this dataframe are: {df.columns}')
-
+    if iloc or show_dims: print('', end=end)
+    
+def _get_missing_cols(df, *, reqcols):
+    missing_cols = []
+    for colgrp in reqcols:
+        if type(colgrp) is str: colgrp=(colgrp,)
+        assert type(colgrp) is tuple, _devonlymsg
+        if not any(col in df.columns for col in colgrp):
+            elem = tuple(col for col in colgrp) if len(colgrp) > 1 else colgrp[0]
+            missing_cols += [elem]
+    return missing_cols
+    
+def check_reqcols(df, *, ptype, reqcols, inv_dt=None, iloc=[0,1,-1],
+                 errfmt='Missing required column(s) {missing_cols} (alternative name(s): {alias}) for prstools input type: {ptype}'):
+    from prstools.errors import SchemaError
+    if inv_dt is not None: raise NotImplementedError()
+    missing_cols = _get_missing_cols(df, reqcols=reqcols)
+    alias = None
+    if len(missing_cols)>0:
+        cprint_input_df(df, iloc=iloc, sst=False);
+        errmsg = errfmt.format(**locals())
+        raise SchemaError(errmsg)
+    dupcols = df.columns[df.columns.duplicated()].unique()
+    baddups = [col for col in reqcols if col in dupcols]
+    if baddups: raise SchemaError(f"Duplicate required column(s): {baddups}")
+        
 def check_reqcols_sst(orisst_df, *, reqcols, colmap=None,
                   errfmt='{prefix} Missing required column(s) {missing_cols} (alternative name(s): {alias}){postfix}',
                   prefix='', postfix = ', please add the column(s) to the sumstat or use --colmap option. '
@@ -853,9 +923,7 @@ def check_reqcols_sst(orisst_df, *, reqcols, colmap=None,
               'After this, if proper, end in a clear way with "--colmap thisistherightcorrectcolmap" codeblock '
               '(give a colmap=\'stuff\' suggestion only if run inside of ipynb.)')
         #print(f'This results in the following colmapping dictionary {colnameconv_dt}, which was already applied to the following dataframe.')
-        cprint_input_df(overview_df,iloc=iloc); print('\n')
-#         err = SumstatSchemaError(errfmt.format(prefix=prefix, missing_cols=missing_cols, alias=alias, postfix=postfix))
-#         dergger
+        cprint_input_df(overview_df,iloc=iloc, sst=True); print('\n')
         err = SumstatSchemaError(errfmt.format(prefix=prefix, missing_cols=missing_cols, alias=alias, postfix=postfix))
         raise err
         
@@ -919,10 +987,13 @@ def compute_beta_mrg(df, *, calc_beta_mrg=True, n_eff_handling='topmedian', copy
     return df
 
 def _pd_read_csv(*args, max_arrow_tries=2, arrow_sleep=0.5, **kwg):
+    if len(args) > 0: fn = args[0]
+    else: fn = 'unknown-file'
     try:
         for i in range(max_arrow_tries):
             try:
-                return pd.read_csv(*args, **kwg)
+                df = pd.read_csv(*args, **kwg); df.attrs['fn'] = fn
+                return df
             except Exception as e:
                 try: import pyarrow.lib
                 except ImportError: pyarrow = None
@@ -939,7 +1010,8 @@ def _pd_read_csv(*args, max_arrow_tries=2, arrow_sleep=0.5, **kwg):
         msg = f"{fn}: pyarrow CSV parser failed after {max_arrow_tries} attempts; falling back to pandas C engine"
         warnings.warn(msg)
         kwg['engine']='c'
-        return pd.read_csv(*args, **kwg)
+        df = pd.read_csv(*args, **kwg); df.attrs['fn'] = fn
+        return df
     except Exception as e:
         raise prst.errors.LoadError(e, stage=1) from e
 
@@ -1014,7 +1086,7 @@ def load_sst(sst_fn, *, colmap=None, addcols=False, addrsids='auto', calc_beta_m
     kwg.update(ukwg); kwg.update(readkwg)
 
     # Loading
-    orisst_df = _pd_read_csv(sst_fn, **kwg) # 60% of time
+    orisst_df = _pd_read_csv(sst_fn, **kwg) # 60% of time, fn addition in here too btw
     if verbose: print(f' -> {orisst_df.shape[0]:>12,} variants loaded.')
 
     # Checks: This part should do all the reqcol checks...
@@ -1227,6 +1299,10 @@ def pvalandbeta_to_betamrg(*, pvals, beta, n_gwas):
     if np.sum(p>1.): warnings.warn('Input p-vals contains {np.sum(p>1.)} values that are larger then 1. This could be an issue.')
     return np.sign(beta)*abs(stats.norm.ppf(pvals/2.0))/np.sqrt(n_gwas) # Original contains -1 in front, not sure this is the right way?
 
+def _get_stripped_plink_base_fn(base_fn):
+    if (base_fn.split('.')[-1] in ('bim','fam','bed')): base_fn = '.'.join(base_fn.split('.')[:-1])
+    return base_fn
+
 def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', cmap=True, delimiter='determine', fil_arr=None, end='\n', start_string='Loading bim/fam. ',
                 testnrows=20, nrows=None, pretest=True, rsidmode=False, add_xidx=False, add_AX=False, check=True, pyarrow=True, verbose=False, reset_index=True,
                 ispretest=False):
@@ -1244,17 +1320,20 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', cmap=True, d
 
     prw = get_pyarrow_prw(delimiter=delimiter, pyarrow=pyarrow)
 
-    if strip and (base_fn.split('.')[-1] in ('bim','fam','bed')): base_fn = '.'.join(base_fn.split('.')[:-1])
+    if strip: base_fn = _get_stripped_plink_base_fn(base_fn)
+    #and (base_fn.split('.')[-1] in ('bim','fam','bed')): base_fn = '.'.join(base_fn.split('.')[:-1])
 
     bim_df = pd.read_csv(base_fn + '.bim', delimiter=delimiter, header=None, nrows=nrows,
                          names=['chrom', 'snp', 'cm', 'pos', 'A1', 'A2'], **prw) if bim else None
     # Next line needs to be before any slicing! because it used for plink bedfile indexing
     if type(bim_df) is pd.DataFrame and add_xidx: bim_df['xidx'] = bim_df.index 
-    if bim: n_snps_start=bim_df.shape[0]
+    if bim: n_snps_start=bim_df.shape[0]; bim_df.attrs['fn'] = bim
 
     fam_df = pd.read_csv(base_fn + '.fam', delimiter=r'\s+', header=None,  nrows=nrows,
                          names=['fid', 'iid', 'father', 'mother', 'gender', 'trait'],dtype={0: str, 1: str}) if fam else None
-    if bim:
+    if fam: fam_df.attrs['fn'] = fam
+    
+    if bim: # Post proc & checks:
         if check: assert bim_df.head(testnrows).isna().sum().sum()==0, 'NaN detected in bim dataframe.'
         if not pd.api.types.is_numeric_dtype(bim_df['chrom']) and cmap:
             cmap = get_chrom_map() if cmap is True else cmap
@@ -1288,7 +1367,6 @@ def load_bimfam(base_fn, strip=True, bim=True, fam=True, chrom='*', cmap=True, d
         if report == '': report='no bim or fam file'
         if len(prw) > 1: report=report+' (used pyarrow)'
         print(f'-> {report}.', end=end, flush=True)
-        
 
     return bim_df, fam_df
 
@@ -1386,10 +1464,17 @@ def load_snpdb(snpdb_df='mini'):
                     'snpdb=mini or full (if prst data dir is enabled) or specify dataframe type as input')
     fn = prst.utils.validate_path(fn=fn, must_exist=True, handle_prstdatadir='only')
     prw = get_pyarrow_prw()
-    snpdb_df = pd.read_csv(fn, sep='\t', **prw)
+    snpdb_df = pd.read_csv(fn, sep='\t', **prw); snpdb_df.attrs['fn'] = fn
     return snpdb_df
 
-def load_weights(fn, ftype='auto', pyarrow=True, sep:str='\t', verbose=False):
+def _load_prstweights_xsv(fn, sep='\t', **prw):
+    h = pd.read_csv(fn, sep=sep, header=None, nrows=2, dtype=str, keep_default_na=False)
+    h1, h2 = h.iloc[0], h.iloc[1]; multi = (h1 == 'allele_weight').sum() > 1
+    names = pd.MultiIndex.from_tuples(zip(h1, h2)) # I presume this always works no ? 
+    if not multi: return pd.read_csv(fn, sep=sep, **prw)
+    else: return pd.read_csv(fn, sep=sep, header=None, skiprows=2, **prw).set_axis(names, axis=1)
+
+def load_weights(fn, ftype='auto', pyarrow=True, sep:str='\t', reqcols=['snp','A1','A2','allele_weight'], iloc=None, verbose=False):
     if pyarrow: # pyarrow mechanics
         try: import pyarrow as pyarrowpack # Prevent var overloading
         except: pyarrow = False
@@ -1410,7 +1495,11 @@ def load_weights(fn, ftype='auto', pyarrow=True, sep:str='\t', verbose=False):
     names = None if not cur_ftype == 'legacyweights.tsv' else BasePred.default_weight_cols
     if cur_ftype == 'prstweights.h5': df = pd.read_hdf(fn, key='df') 
     elif cur_ftype == 'prstweights.parquet': df = pd.read_parquet(fn)
+    elif cur_ftype == 'prstweights.tsv': df = _load_prstweights_xsv(fn, sep='\t', **prw)
     else: df = pd.read_csv(fn, sep=sep, names=names, **header_dt, **prw)
+    df.attrs['fn'] = fn
+    ikwg = {} if iloc is None else dict(iloc=iloc)
+    check_reqcols(df, ptype='weights', reqcols=reqcols, **ikwg)
     return df
 
 def _get_countstring(n):
@@ -1496,27 +1585,11 @@ def load_regdef(regdef, fnfmt='./data/defs/regdef/{regdef}.regdef.tsv', check=Tr
         raise FileNotFoundError(msg)
     if verbose: print(f'Loading regdef \'{regdef}\' ', end='', flush=True)
     regdef_df = pd.read_csv(fn, delimiter='\t') # dataframe with region definitions 
+    regdef_df.attrs['fn'] = fn
     assert check, 'always doing check!'
     check_regdef(regdef_df)
     if verbose: print(f'-> {regdef_df.shape[0]:,} regions loaded.', flush=True)
     return regdef_df
-
-def load_prscs_ldblk(fn,blkid):
-    ## NOT SURE I NEED THIS FUNCTION ...
-
-    #def load_linkage_region(self, *, i):
-    geno_dt = self.reg_dt[i]
-    store_dt = geno_dt['store_dt']
-
-    for varname, file_dt in store_dt.items():
-        module = importlib.import_module('.'.join(file_dt['typestr'].split('.')[:-1]))
-        cname  = file_dt['typestr'].split('.')[-1]
-        CurClass = getattr(module, cname) # Retrieves module.submodule.submodule.. etc
-        curfullfn = os.path.join(self.curdn, file_dt['fn'])
-        geno_dt[varname] = CurClass(pd.read_hdf(curfullfn, key=file_dt['key']))
-        if self.verbose: print(f'loading: fn={curfullfn} key={file_dt["key"]}'+' '*50, end='\r')
-
-    return something
 
 # Later this could go into a seperate dataset submodule, perhaps in classes (like keras)
 # from keras.datasets import mnist; data = mnist.load_data()
@@ -1537,11 +1610,95 @@ def load_example(dn='./data/_example/', n_gwas=2565, pop='EUR', verbose=False):
     st.target_bed = prst.io.load_bed(target)
     return st
 
-#     def _pd_to_atomizer(*, to_file, fn, **kwg):
-#         tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"
-#         ret = to_file(tmp_fn, **kwg)
-#         os.replace(tmp_fn, fn)
-#         return ret
+def _greedy_rename(df, rename_dt, return_renamed_dt=False):
+    # target -> candidate source columns, canonical first
+    targets = {}
+    for src, dst in rename_dt.items(): targets.setdefault(dst, []).append(src)
+    rename = {}; drop = []
+    for dst, candidates in targets.items():
+        found = [col for col in candidates if col in df.columns]
+        if not found: continue
+        keep = found[0]  # canonical wins, then rename_dt order
+        if keep != dst: 
+            rename[keep] = dst
+            if dst in df.columns: drop.append(dst)
+    rdf = df.drop(columns=drop).rename(columns=rename)
+    if return_renamed_dt: return rdf, rename
+    else: return rdf
+
+def _validate_phenocols(df, phenocols):
+    if phenocols is None: return None, {}
+    if isinstance(phenocols, str): phenocols = phenocols.replace(',', ' ').split()
+    rename, rcols = {}, []
+    for col in phenocols:
+        postfix = f"Options include: {', '.join(map(str, df.columns)):.1000} ..."
+        m = re.fullmatch(r'(.+?)(\d+)-\1(\d+)', col)
+        if col.startswith('iid=') or col.startswith('fid='):
+            dst, src = col.split('=', 1)
+            if dst not in ('iid', 'fid'): raise ValueError(f"Invalid mapping: {col}")
+            if src not in df: raise ValueError(f"Column not found: \'{src}\'. {postfix}")
+            rename[src] = dst
+        elif col in df: rcols.append(col)
+        elif m:
+            prefix, start, stop = m.group(1), int(m.group(2)), int(m.group(3))
+            cols = [f'{prefix}{i}' for i in range(start, stop + 1)]
+            missing = [c for c in cols if c not in df]
+            if missing: raise ValueError(f"Columns not found: {missing}")
+            rcols += cols
+        else: raise ValueError(f"Column not found: {col}. {postfix}")
+    return (list(dict.fromkeys(rcols)) if rcols else None), rename
+
+def load_pheno(fn, nrows=None, rename_dt=None, reqcols=['iid'], ptype='pheno', phenocols=None, verbose=True):
+    # Various preps:
+    idcols = ['iid','fid']; labels = {'pheno':'phenotype', 'cov':'covariate'}
+    _default_rename_dt = {'iid':'iid','eid':'iid','IID':'iid','#IID':'iid', 'fid':'fid','FID':'fid','#FID':'fid'}
+    allowed_ptypes = {'pheno', 'cov'}
+    if ptype not in allowed_ptypes: raise ValueError(f"ptype must be {allowed_ptypes}, got {ptype}")
+    ready_fn = prst.utils.validate_path(**{ptype:fn}) # some crap with adding extensions and such.. validate_path...
+    if verbose: print(f'Loading {labels.get(ptype, ptype)} file.'.ljust(23), end='', flush=True)
+    
+    # Loading:
+    df = pd.read_csv(ready_fn, delimiter=r'\s+', nrows=nrows); df.attrs['fn'] = ready_fn
+    inject=''#inject = f' [{", ".join(phenocols)}]' if phenocols else ''
+    if verbose: print(f' -> {df.shape[0]:>12,} individuals and {df.shape[1]:,} columns loaded{inject}. ', end='', flush=True)
+    
+    # Processing:
+    phenocols, potential_dt = _validate_phenocols(df=df, phenocols=phenocols)
+
+    if potential_dt: rename_dt = {**potential_dt, **_default_rename_dt}
+    if rename_dt is None: rename_dt = _default_rename_dt
+    df, renamed_dt = _greedy_rename(df, rename_dt=rename_dt, return_renamed_dt=True)
+    report_dt = {key: val for key, val in renamed_dt.items() if not key in {'IID','FID','#FID'}-set(potential_dt.keys())}
+    if report_dt:
+        renamestring = ", ".join(f"{k} -> {v}" for k,v in report_dt.items())
+        if not potential_dt:
+            msg = (f"Renaming {ptype} column(s): {renamestring}\nWith the option --{ptype}cols you can set the "
+               f"iid and fid column explicitely (e.g. --{ptype}cols iid=ID_0 fid=FAM_ID)")  
+        else: msg = f'[{renamestring}]'
+        if not potential_dt: print(''); prst.warn(msg, colour='yellow')
+        elif verbose: print(msg, flush=True)
+    elif verbose: print('', flush=True)
+    if phenocols and verbose: print(f'Columns included from {ptype}-file:', ', '.join(phenocols), flush=True)
+    prst.io.check_reqcols(df, reqcols=reqcols, ptype=ptype)
+    cols = [elem for elem in idcols if elem in df]
+    df[cols] = df[cols].astype(str)
+    if phenocols is not None: selcols=cols+phenocols; df=df[selcols]
+    iiddupcnt = df['iid'].duplicated().sum()
+    msg = f'Input file {fn} contains duplicates in iid column.'
+    if iiddupcnt>0: # ID Uniqueness checks!
+        prst.warn(msg, colour='orange')
+        postfix = 'iid or fid+iid needs to be unique'
+        if not 'fid' in df:
+            msg = f'iid column contains duplicates and no fid column found. {postfix}'
+            raise ValueError(msg)
+        else: # Check if fid + iid is unique
+            dupcnt = df.duplicated(subset=['fid', 'iid']).sum()
+            if dupcnt > 0:
+                msg = f'Input file contains {dupcnt} duplicate fid+iid combinations. {postfix}'
+                raise ValueError(msg)
+    
+    return df
+
 def _pd_to_atomizer(*, to_file, fn, **kwg):
     bn = os.path.basename(fn)
     dn = os.path.dirname(fn) or "."
@@ -1599,24 +1756,29 @@ def save_sst(sst_df, fn=None, return_sst=False, ftype='tsv', basecols=None, addi
     #os.replace(tmp_fn, fn) # atomically move into place
     if verbose: print(f'-> Done')
     if return_sst: return out_df
+    
+def save_weights(weights_df, fn=None, return_weights=False):
+    raise NotImplementedError()
+    out_df = False
+    if return_weights: return out_df
 
-def save_prs(yhat, *, fn, ftype='prstprs.tsv', nanwarn=True, verbose=False, reset_index=True, end='\n\n'):
-    assert type(yhat) is pd.DataFrame, f'Input \'yhat\' is required to be pd.DataFrame. It is currently: {type(yhat)}'
-    if reset_index: yhat = yhat.reset_index(drop=False) # With this the FID and IID become columns
-    #yhat = yhat.rename(columns=dict(fid='FID',iid='IID')) why these names...
-    if ftype == 'prstprs.tsv':
-        sep='\t'
-        to_file = yhat.to_csv
-    else:
-        raise ValueError(f"'{ftype}' is not a valid filetype/ftype. only 'prstprs.tsv' availabe atm")
-
+def save_prs(pred_df, fn=None, ftype='prstprs.tsv', nanwarn=True, verbose=False, reset_index=True, end='\n\n'):
+    assert type(pred_df) is pd.DataFrame, f'Input \'pred_df\' is required to be pd.DataFrame. It is currently: {type(yhat)}'
+    if reset_index: pred_df = pred_df.reset_index(drop=False) # With this the FID and IID become columns
+    if ftype == 'prstprs.tsv': sep='\t'; to_file = pred_df.to_csv
+    else: raise ValueError(f"'{ftype}' is not a valid filetype/ftype. only 'prstprs.tsv' availabe atm")
     fn = fn.format_map(dict(ftype=ftype)) # Maybe some AutoDict buzz here later.
-    #import uuid; tmp_fn = f"{fn}.incomplete.{uuid.uuid4().hex[:16]}"  # unique temp file name  
     if verbose: print(f'Saving prediction (i.e. PRS) to: {fn}', end=' ')
     _pd_to_atomizer(to_file=to_file, fn=fn, sep=sep, index=False)
-    #to_file(tmp_fn, sep=sep, index=False)
-    #os.replace(tmp_fn, fn) # atomically move into place
     if verbose: print(f'-> Done', end=end)
+        
+def save_score(score_df, fn, ftype='prsteval.tsv', verbose=True, end='\n\n'):
+    assert type(score_df) is pd.DataFrame, f'Input \'pred_df\' is required to be pd.DataFrame. It is currently: {type(score_df)}'
+    fn = fn.format_map(dict(ftype=ftype))
+    if verbose: print(f'Saving evaluation scores to: {fn}', end=' ', flush=True)
+    _pd_to_atomizer(fn=fn, to_file=score_df.to_csv, sep='\t', index=False)
+    if verbose: print('-> Done', end=end, flush=True)
+    return fn
 
 if not '__file__' in locals():
     import sys

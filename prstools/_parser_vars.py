@@ -221,10 +221,35 @@ def get_subparserkwg_lst():
                                                           'metavar': '<yes/no>',
                                                           'type': str,
                                                           'default': 'auto',
-                                                          'choices': ['yes', 'no', 'auto', 'eval'],
+                                                          'choices': ['yes', 'no', 'auto'],
                                                           'help': "Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. With the 'auto' option (which "
-                                                                  "is the default) the tool tries to generate a prediction and evaluation, unless the --chrom option is set. With option 'eval' it tries "
-                                                                  'to evaluate performance and throws an error if it fails. Available options: (yes/no/auto/eval).'}}}},
+                                                                  'is the default) the tool tries to generate a prediction, unless the --chrom option is set, and will always try to generate a prediction '
+                                                                  'if an evaluation is requested (--pheno).  Available options: (yes/no/auto).'}},
+                                      'pheno': {'args': ['--pheno'],
+                                                'kwargs': {'required': False,
+                                                           'metavar': '<file>',
+                                                           'default': 'auto',
+                                                           'help': 'Optional: Phenotype file used for PRS evaluation. Individual IDs and common phenotype column formats are detected automatically. By '
+                                                                   'default this option is auto and will try to evaluate using target path "<bim-prefix>.pheno". Use --phenocols to select or map columns '
+                                                                   'explicitly.'}},
+                                      'phenocols': {'args': ['--phenocols'],
+                                                    'kwargs': {'required': False,
+                                                               'metavar': '<cols>',
+                                                               'default': None,
+                                                               'help': 'Optional: Select columns from --pheno and/or map their names. Multiple columns can be comma- or space-separated. For example: '
+                                                                       "'--phenocols iid=eid,CAD'."}},
+                                      'cov': {'args': ['--cov'],
+                                              'kwargs': {'required': False,
+                                                         'metavar': '<file>',
+                                                         'default': 'auto',
+                                                         'help': 'Optional: Covariate file used during PRS evaluation. Individual IDs and common covariate formats are detected automatically. By default '
+                                                                 'this option is auto and will try to evaluate using target path "<bim-prefix>.cov". Use --covcols to select or map columns explicitly.'}},
+                                      'covcols': {'args': ['--covcols'],
+                                                  'kwargs': {'required': False,
+                                                             'metavar': '<cols>',
+                                                             'default': None,
+                                                             'help': 'Optional: Select columns from --cov and/or map their names. Multiple columns can be comma- or space-separated. For example: '
+                                                                     "'--covcols iid=eid,age,sex,PC1-PC10'."}}}},
                  'model': {'grpheader': 'Model Arguments (all optional)',
                            'pkwargs': {'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Total number of MCMC iterations.', 'type': int, 'default': 1000}},
                                        'n_burnin': {'args': ['--n_burnin'],
@@ -338,10 +363,35 @@ def get_subparserkwg_lst():
                                                           'metavar': '<yes/no>',
                                                           'type': str,
                                                           'default': 'auto',
-                                                          'choices': ['yes', 'no', 'auto', 'eval'],
+                                                          'choices': ['yes', 'no', 'auto'],
                                                           'help': "Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. With the 'auto' option (which "
-                                                                  "is the default) the tool tries to generate a prediction and evaluation, unless the --chrom option is set. With option 'eval' it tries "
-                                                                  'to evaluate performance and throws an error if it fails. Available options: (yes/no/auto/eval).'}}}},
+                                                                  'is the default) the tool tries to generate a prediction, unless the --chrom option is set, and will always try to generate a prediction '
+                                                                  'if an evaluation is requested (--pheno).  Available options: (yes/no/auto).'}},
+                                      'pheno': {'args': ['--pheno'],
+                                                'kwargs': {'required': False,
+                                                           'metavar': '<file>',
+                                                           'default': 'auto',
+                                                           'help': 'Optional: Phenotype file used for PRS evaluation. Individual IDs and common phenotype column formats are detected automatically. By '
+                                                                   'default this option is auto and will try to evaluate using target path "<bim-prefix>.pheno". Use --phenocols to select or map columns '
+                                                                   'explicitly.'}},
+                                      'phenocols': {'args': ['--phenocols'],
+                                                    'kwargs': {'required': False,
+                                                               'metavar': '<cols>',
+                                                               'default': None,
+                                                               'help': 'Optional: Select columns from --pheno and/or map their names. Multiple columns can be comma- or space-separated. For example: '
+                                                                       "'--phenocols iid=eid,CAD'."}},
+                                      'cov': {'args': ['--cov'],
+                                              'kwargs': {'required': False,
+                                                         'metavar': '<file>',
+                                                         'default': 'auto',
+                                                         'help': 'Optional: Covariate file used during PRS evaluation. Individual IDs and common covariate formats are detected automatically. By default '
+                                                                 'this option is auto and will try to evaluate using target path "<bim-prefix>.cov". Use --covcols to select or map columns explicitly.'}},
+                                      'covcols': {'args': ['--covcols'],
+                                                  'kwargs': {'required': False,
+                                                             'metavar': '<cols>',
+                                                             'default': None,
+                                                             'help': 'Optional: Select columns from --cov and/or map their names. Multiple columns can be comma- or space-separated. For example: '
+                                                                     "'--covcols iid=eid,age,sex,PC1-PC10'."}}}},
                  'model': {'grpheader': 'Model Arguments (all optional)',
                            'pkwargs': {'n_iter': {'args': ['--n_iter'], 'kwargs': {'help': 'Total number of MCMC iterations.', 'type': int, 'default': 10000}},
                                        'n_burnin': {'args': ['--n_burnin'],
@@ -417,10 +467,35 @@ def get_subparserkwg_lst():
                                                           'metavar': '<yes/no>',
                                                           'type': str,
                                                           'default': 'auto',
-                                                          'choices': ['yes', 'no', 'auto', 'eval'],
+                                                          'choices': ['yes', 'no', 'auto'],
                                                           'help': "Optional: Add this argument to set behavior for PRS generation for the induviduals in the target dataset. With the 'auto' option (which "
-                                                                  "is the default) the tool tries to generate a prediction and evaluation, unless the --chrom option is set. With option 'eval' it tries "
-                                                                  'to evaluate performance and throws an error if it fails. Available options: (yes/no/auto/eval).'}}}},
+                                                                  'is the default) the tool tries to generate a prediction, unless the --chrom option is set, and will always try to generate a prediction '
+                                                                  'if an evaluation is requested (--pheno).  Available options: (yes/no/auto).'}},
+                                      'pheno': {'args': ['--pheno'],
+                                                'kwargs': {'required': False,
+                                                           'metavar': '<file>',
+                                                           'default': 'auto',
+                                                           'help': 'Optional: Phenotype file used for PRS evaluation. Individual IDs and common phenotype column formats are detected automatically. By '
+                                                                   'default this option is auto and will try to evaluate using target path "<bim-prefix>.pheno". Use --phenocols to select or map columns '
+                                                                   'explicitly.'}},
+                                      'phenocols': {'args': ['--phenocols'],
+                                                    'kwargs': {'required': False,
+                                                               'metavar': '<cols>',
+                                                               'default': None,
+                                                               'help': 'Optional: Select columns from --pheno and/or map their names. Multiple columns can be comma- or space-separated. For example: '
+                                                                       "'--phenocols iid=eid,CAD'."}},
+                                      'cov': {'args': ['--cov'],
+                                              'kwargs': {'required': False,
+                                                         'metavar': '<file>',
+                                                         'default': 'auto',
+                                                         'help': 'Optional: Covariate file used during PRS evaluation. Individual IDs and common covariate formats are detected automatically. By default '
+                                                                 'this option is auto and will try to evaluate using target path "<bim-prefix>.cov". Use --covcols to select or map columns explicitly.'}},
+                                      'covcols': {'args': ['--covcols'],
+                                                  'kwargs': {'required': False,
+                                                             'metavar': '<cols>',
+                                                             'default': None,
+                                                             'help': 'Optional: Select columns from --cov and/or map their names. Multiple columns can be comma- or space-separated. For example: '
+                                                                     "'--covcols iid=eid,age,sex,PC1-PC10'."}}}},
                  'model': {'grpheader': 'Model Arguments (all optional)',
                            'pkwargs': {'mode': {'args': ['--mode'],
                                                 'kwargs': {'help': "Different modes for file handling. If 'strict' is present an error in forinstance the loading of a weight will lead to a stop. ",

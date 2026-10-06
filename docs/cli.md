@@ -26,8 +26,19 @@
 | [`prst combine`](#prst-combine) | Combine PRS outputs |
 | [`prst downloadutil`](#prst-downloadutil) | Download reference data and examples |
  -->
+ 
+<!-- ###  In situ styling stuff : -->
+<style>
+.prst-overview th:first-child,
+.prst-overview td:first-child {width: 1%;white-space: nowrap;}
+.prst-overview td:first-child code {white-space: nowrap;}
+</style>
 
 # `prst`
+
+
+```{table}
+:class: prst-overview
 
 | Command | Description |
 |---|---|
@@ -38,6 +49,8 @@
 | `prst transform` | {{ prst.transform }} |
 | `prst combine` | {{ prst.combine }} |
 | `prst downloadutil` | {{ prst.downloadutil }} |
+```
+
 
 # `prst config`
 
