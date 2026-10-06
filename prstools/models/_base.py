@@ -1195,7 +1195,7 @@ class PRSCS2(BasePred, PRSTCLI):
     
 class PRSCSX2(BasePred, PRSTCLI):
     
-    "PRS-CSx v2: Alpha implementation, A multi-ancestry polygenic prediction method \
+    "PRS-CSx v2: A multi-ancestry polygenic prediction method \
     that jointly infers SNP effect sizes using coupled continuous shrinkage (CS) priors."
     
     _gig = None
