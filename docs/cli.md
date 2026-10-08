@@ -69,7 +69,7 @@
 :func: get_parser
 :prog: prst
 :path: prscs2
-:noepilog:
+<!-- :noepilog: -->
 ```
 
 # `prst prscsx2`
@@ -79,7 +79,7 @@
 :func: get_parser
 :prog: prst
 :path: prscsx2
-:noepilog:
+<!-- :noepilog: -->
 ```
 
 # `prst multiprs`

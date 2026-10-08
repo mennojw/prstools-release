@@ -178,7 +178,21 @@ def set_config(**kwg):
     for key, item in kwg.items():
         prstcfg[key] = copypackage.deepcopy(item)
         
-def get_parser(): return parse_args(argv=[], basecmd='prst', return_parser=True)
+# def get_parser(): return parse_args(argv=[], basecmd='prst', return_parser=True)
+
+def get_parser(nostyle=True):
+    import re
+    parser = parse_args(argv=[], basecmd='prst', return_parser=True)
+    if nostyle:
+        ansi = re.compile(r'\x1b\[[0-9;]*m')
+        def clean(p):
+            if p.epilog: p.epilog = ansi.sub('', p.epilog)
+            for action in p._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    for subparser in action.choices.values():
+                        clean(subparser)
+        clean(parser)
+    return parser
 
 def parse_args(argv=None, description="Convenient and powerfull Polygenic Risk Score creation [v{v}]. \n\'prst\' is a commandline shorthand for \'prstools\'",
                subparserkwg_lst=None, basecmd='prstools', return_spkwg=False, reload=False, return_parser=False):

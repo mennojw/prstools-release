@@ -149,9 +149,9 @@ def get_subparserkwg_lst():
       'description': 'PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.',
       'display_info': True,
       'help': 'PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under continuous shrinkage (CS) priors.',
-      'epilog': '\x1b[32m# Examples (get data, run model) --> can be directly copy-pasted (:\x1b[0m\n'
-                'prstools downloadutil --pattern example --destdir ./; cd example        \n'
-                'prst prscs2 --ref ldref_1kg_pop -t target -s sumstats.tsv --n_gwas 2565 --out result-prscs2\n',
+      'epilog': '\x1b[32m# Examples (get data, run model) --> can be directly copy-pasted (:\x1b[0m \n'
+                ' prstools downloadutil --pattern example --destdir ./; cd example         \n'
+                ' prst prscs2 --ref ldref_1kg_pop -t target -s sumstats.tsv --n_gwas 2565 --out result-prscs2 \n',
       'modulename': 'prstools.models._base',
       'groups': {'general': {'grpheader': 'General Options',
                              'pkwargs': {'basics': {'args': ['-h', '--help'], 'kwargs': {'action': 'help', 'help': 'Show this help message and exit.'}},
@@ -281,10 +281,11 @@ def get_subparserkwg_lst():
      {'cmdname': 'prscsx2',
       'clsname': 'PRSCSX2',
       'hiddencli': False,
-      'description': 'PRS-CSx v2: A multi-ancestry polygenic prediction method     that jointly infers SNP effect sizes using coupled continuous shrinkage (CS) priors.',
+      'description': 'PRS-CSx v2: A multi-ancestry polygenic prediction method that jointly infers SNP effect sizes using coupled continuous shrinkage (CS) priors.\n'
+                     'The meta-analyzed PRS is always generated (--meta=True in PRS-CSx v1).\n',
       'display_info': True,
-      'help': 'PRS-CSx v2: A multi-ancestry polygenic prediction method     that jointly infers SNP effect sizes using coupled continuous shrinkage (CS) priors.',
-      'epilog': None,
+      'help': 'PRS-CSx v2: A multi-ancestry polygenic prediction method that jointly infers SNP effect sizes using coupled continuous shrinkage (CS) priors.',
+      'epilog': '\x1b[32m# Example :\x1b[0m\nprst prscsx2 --ref snpinfo_mult_1kg_hm3 -t target -s sumstats_eur.tsv sumstats_eas.tsv --pop eur eas --n_gwas 100000 20000 --out result-prscsx2\n',
       'modulename': 'prstools.models._base',
       'groups': {'general': {'grpheader': 'General Options',
                              'pkwargs': {'basics': {'args': ['-h', '--help'], 'kwargs': {'action': 'help', 'help': 'Show this help message and exit.'}},

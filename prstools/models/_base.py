@@ -101,7 +101,7 @@ class BasePred(ABC):
                 newepi.append(''.join(elems))
             else:
                 newepi.append(elem)
-        epilog = '\n'.join(newepi)
+        epilog = ' \n '.join(newepi)
         
         return dedent(epilog)
     
@@ -265,8 +265,9 @@ class BasePred(ABC):
         if out_fnfmt is None: out_fnfmt = model.create_output_fnfmt(**locals())
         pheno_strict = True if pheno and pheno != 'auto' else False
         try: # for auto, so i does not trip over a non-existing cov
-            if pheno == 'auto': pheno=prst.utils.validate_path(pheno=target)
-            if cov == 'auto': cov=prst.utils.validate_path(cov=target)
+            vtarget = prst.utils._get_stripped_plink_path(target)
+            if pheno == 'auto': pheno=prst.utils.validate_path(pheno=vtarget)
+            if cov == 'auto': cov=prst.utils.validate_path(cov=vtarget)
         except: pass
         if cov == 'auto': cov=None
         try: # Predict: 
@@ -1195,8 +1196,10 @@ class PRSCS2(BasePred, PRSTCLI):
     
 class PRSCSX2(BasePred, PRSTCLI):
     
-    "PRS-CSx v2: A multi-ancestry polygenic prediction method \
-    that jointly infers SNP effect sizes using coupled continuous shrinkage (CS) priors."
+    """\
+    PRS-CSx v2: A multi-ancestry polygenic prediction method that jointly infers SNP effect sizes using coupled continuous shrinkage (CS) priors.
+    The meta-analyzed PRS is always generated (--meta=True in PRS-CSx v1).
+    """
     
     _gig = None
     _default_sampler='rue'
@@ -1246,7 +1249,25 @@ class PRSCSX2(BasePred, PRSTCLI):
     
     @classmethod
     def _get_cli_epilog(cls, commentccode='32'):
-        return None
+        from textwrap import dedent
+        def format_color(text, color_code):
+            if color_code is None: return text
+            else: return f"\033[{color_code}m{text}\033[0m"
+
+        epilog=f'''\
+        # Example :
+        prst prscsx2 --ref snpinfo_mult_1kg_hm3 -t target -s sumstats_eur.tsv sumstats_eas.tsv --pop eur eas --n_gwas 100000 20000 --out result-prscsx2
+        '''
+
+        newepi = []
+        for elem in epilog.split('\n'):
+            elems = elem.split('#')
+            elems[-1] = format_color('#'+elems[-1],commentccode)
+            if len(elems)>1: newepi.append(''.join(elems))
+            else: newepi.append(elem)
+        epilog = '\n'.join(newepi)
+
+        return dedent(epilog)
     
     @classmethod
     def _get_cli_spkwg(cls, basic_pkwargs=True): ## This badboi wraps the super method to enhance it.
@@ -1259,7 +1280,6 @@ class PRSCSX2(BasePred, PRSTCLI):
             "For example: --pop EUR AFR. Standard PRS-CSx reference populations are AFR, AMR, EAS, EUR and SAS."))
         spkwg['groups']['data']['pkwargs']['pop'] = pop
         pkwargs = spkwg['groups']['data']['pkwargs']
-#         def morph(arg):
         spkwg['groups']['data']['pkwargs'] = {k: pkwargs[k] for k in order if k in pkwargs} | {k: v for k, v in pkwargs.items() if k not in order}
         return spkwg
     

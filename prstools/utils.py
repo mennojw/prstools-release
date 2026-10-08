@@ -260,6 +260,9 @@ def validate_path(*, must_exist=True, handle_prstdatadir=False, verbose=False, *
         
     return newargs[0] if len(newargs) == 1 else tuple(newargs)
 
+def _get_stripped_plink_path(fn):
+    return fn.rsplit('.', 1)[0] if fn.endswith(('.bed', '.bim', '.fam', '.pgen', '.pvar', '.psam')) else fn
+
 def _get_path_basename(item):
     if type(item) is str:
         newitem = os.path.basename(item)

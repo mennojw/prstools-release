@@ -16,9 +16,7 @@ All the above, for a real GWAS sumstat, within 30 minutes using only
 **1** command. Installation and running the demo example should not take
 more than 10 minutes.
 
-We are actively developing prstools and feedback by mail or our
-[feedback form](https://forms.gle/TnvNyBX6qDy7Vupn9) (with 🏆 lottery)
-is much appreciated!
+**Website:** <https://prstools.readthedocs.io/>
 
 ## Install
 
@@ -30,7 +28,7 @@ pip install -U --prefer-binary prstools
 
 For it to work, you should have python3.8 or later installed (`pip` is
 included in python3.8+). If the command above does not work directly you
-can install using `conda` (or `mamba` if you have that), by running
+can install using `conda` (or `mamba` if you have that) by running
 `conda install "python>=3.9"`. For other install issues please check the
 [install
 guide](https://prstools.readthedocs.io/en/latest/guides/install_guide.html)
@@ -40,8 +38,7 @@ or send us a mail.
 
 Immediately after installing prstools, it should be possible to download
 & run the demo example (~4mb), by pasting the following into the
-commandline (if not see [install
-guide](https://prstools.readthedocs.io/en/latest/guides/install_guide.html)):
+commandline:
 
 ``` bash
 # Makes 'example' dir with data in current path:
@@ -52,42 +49,22 @@ prstools prscs2 --ref ldref_1kg_pop --target target \
                 --sst sumstats.tsv --n_gwas 2565 --out ./result 
 ```
 
-This will run PRS-CS2 on the example data, using the new implementation
-to demonstrate the capabilities of prstools and makes PRS predictions
-for the example dataset. The best and fastest way to get a PRS for your
-case is to try the **Tutorial** below. <br>
+This will run PRS-CS2 and make PRS prediction using example data. The
+best and fastest way to get a PRS for your case is to try the [Getting
+Started
+Tutorial](https://prstools.readthedocs.io/en/latest/tutorials/getting_started.html).
+<br>
 
-There is also the prstools documentation, residing inside of the
-command-line interface, which you can see by typing `prstools` or a
-subcommand. Forinstance typing `prstools prscs2` will output the
-**documentation** for the `prscs2` subcommand:
-
-``` console
-Usage:
- prst prscs2 [-h  --cpus <num-of-cpus>] --ref <dir/refcode> --target <bim-prefix>
-                   --sst <file> --out <dir+prefix> [--n_gwas <num>  --chrom <chroms>]
-                   [ ... [omitted for readability] ... ]
-
-PRS-CS v2: A polygenic prediction method that infers posterior SNP effect sizes under 
-continuous shrinkage (CS) priors.
-
-... [omitted for readability] ...
-
-# Examples (get data, run model) --> can be directly copy-pasted (:
-prstools downloadutil --pattern example --destdir ./; cd example        
-prst prscs2 --ref ldref_1kg_pop -t target -s sumstats.tsv --n_gwas 2565 --out result-prscs2
-```
-
-As can be seen, there are examples at the end of the help output to
-illustrate usage, which should work with a simple copy-paste.
-
-There is now also an online version of all this documentation
-(<https://prstools.readthedocs.io/>). <br>
+There is also the prstools reference **documentation**, residing inside
+of the command-line interface (e.g. type `prst prscs2 --help`), with
+copy-pastable examples to help illustrate usage. The same documention is
+also [available
+online](https://prstools.readthedocs.io/en/latest/cli.html).
 
 ## Tutorial + Video
 
-For more information and a hands on demonstration of what prstools can
-do have a look at the [Getting Started
+For more information and a hands-on demonstration of what prstools can
+do, have a look at the [Getting Started
 Tutorial](https://prstools.readthedocs.io/en/latest/tutorials/getting_started.html).
 There is also a [Video](https://youtu.be/BP1zUBFH2l8). The
 tutorial+video is a tiny bit older than the current prstools version,
@@ -99,3 +76,7 @@ Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.
 
 For questions and support please send a mail
 (menno.j.witteveen@gmail.com).
+
+We are actively developing prstools and feedback by mail or our
+[feedback form](https://forms.gle/TnvNyBX6qDy7Vupn9) (with 🏆 lottery)
+is much appreciated!
