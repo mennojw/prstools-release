@@ -49,17 +49,17 @@ prstools prscs2 --ref ldref_1kg_pop --target target \
                 --sst sumstats.tsv --n_gwas 2565 --out ./result 
 ```
 
-This will run PRS-CS2 and make PRS prediction using example data. The
-best and fastest way to get a PRS for your case is to try the [Getting
-Started
+This will run PRS-CS2 and make PRS prediction using example data. For a
+more comprehensive introduction and the best and fastest way to get a
+PRS for your case, try the [Getting Started
 Tutorial](https://prstools.readthedocs.io/en/latest/tutorials/getting_started.html).
 <br>
 
-There is also the prstools reference **documentation**, residing inside
-of the command-line interface (e.g. type `prst prscs2 --help`), with
-copy-pastable examples to help illustrate usage. The same documention is
-also [available
-online](https://prstools.readthedocs.io/en/latest/cli.html).
+Additionaly, prstools provides documentation through its command-line
+interface. Run `prst` to see the available commands, or
+`prst prscs2 --help` for options and copy-pastable examples. The same
+documention is [available
+online](https://prstools.readthedocs.io/en/latest/cli.html) too.
 
 ## Tutorial + Video
 
