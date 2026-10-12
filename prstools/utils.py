@@ -843,7 +843,8 @@ class DownloadUtil(AutoPRSTCLI): #, AutoPRSTSubparser):
 class Combine(AutoPRSTCLI): #, AutoPRSTSubparser):
     
     '''\
-    A tool to combine genetics-related text files. If all is well you won't need this.
+    A tool to combine genetics-related text files.
+    For example, you can use this tool to combine 22 pre-chromosome PRS weight files into 1 weight file.
     '''
     
     
