@@ -68,7 +68,12 @@ setuptools.setup(
         'Intended Audience :: ' + cfg['audience'].title(),
         'Natural Language :: ' + cfg['language'].title(),
     ] + ['Programming Language :: Python :: '+o for o in py_versions[py_versions.index(min_python):]] + (['License :: ' + lic[1] ] if lic[1] else []),
-    url = cfg['git_url'],
+    # PyPI links
+#     url = cfg['homepage'],
+    project_urls = {
+        'Home': cfg['homepage'],
+        'Repository': cfg['git_url'],
+    },
     packages = setuptools.find_packages(),
     include_package_data = True,
     install_requires = requirements,
